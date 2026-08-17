@@ -19,3 +19,5 @@ export function getEnv(source: Record<string, string | undefined> = process.env)
 
   return parsed.data;
 }
+
+export const env = getEnv();
