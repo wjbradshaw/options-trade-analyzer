@@ -1,0 +1,32 @@
+:root {
+  color-scheme: dark;
+  --canvas: #07111f;
+  --surface: #0e1c2e;
+  --ink: #f4f7fb;
+  --muted: #a9b8cb;
+  --accent: #79d4c1;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  background: var(--canvas);
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background: var(--canvas);
+  color: var(--ink);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
