@@ -47,4 +47,37 @@ describe("parseTradeAlert", () => {
 
     expect(result).toMatchObject({ ok: true, value: { tags: ["ER", "LOTTO"] } });
   });
+
+  it("leaves invalid expiration, strike, and premium values unpopulated", () => {
+    const result = parseTradeAlert("SPX 99/99 0c @0", "2026-08-12T09:39:00-04:00");
+
+    expect(result).toMatchObject({
+      ok: true,
+      value: {
+        expiration: null,
+        strike: null,
+        alertedPremium: null,
+        issues: expect.arrayContaining([
+          { field: "expiration", code: "invalid" },
+          { field: "strike", code: "invalid" },
+          { field: "alertedPremium", code: "invalid" },
+        ]),
+      },
+    });
+  });
+
+  it("does not treat alert labels as confirmed ticker symbols", () => {
+    const result = parseTradeAlert(
+      "ALERT 8/14 220c @2.98",
+      "2026-08-12T09:39:00-04:00",
+    );
+
+    expect(result).toMatchObject({
+      ok: true,
+      value: expect.objectContaining({
+        symbol: null,
+        issues: expect.arrayContaining([{ field: "symbol", code: "invalid" }]),
+      }),
+    });
+  });
 });

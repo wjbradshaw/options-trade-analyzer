@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { parseTradeAlert } from "@/features/alerts/domain/parser";
 import { validateCriticalFields } from "@/features/alerts/domain/validation";
 
 describe("validateCriticalFields", () => {
@@ -28,6 +29,19 @@ describe("validateCriticalFields", () => {
       }),
     ).toEqual([
       { field: "side", code: "required" },
+      { field: "expiration", code: "required" },
+    ]);
+  });
+
+  it("requires critical fields left unpopulated by invalid parser candidates", () => {
+    const result = parseTradeAlert("SPX 99/99 0c", "2026-08-12T09:39:00-04:00");
+
+    if (!result.ok) {
+      throw new Error("Expected parsing to preserve the incomplete alert for validation");
+    }
+
+    expect(validateCriticalFields(result.value)).toEqual([
+      { field: "strike", code: "required" },
       { field: "expiration", code: "required" },
     ]);
   });

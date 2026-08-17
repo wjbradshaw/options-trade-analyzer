@@ -9,7 +9,7 @@ export type AlertField =
   | "expiration"
   | "alertedPremium";
 
-export type ParseIssueCode = "ambiguous" | "required";
+export type ParseIssueCode = "ambiguous" | "invalid" | "required";
 
 export interface ParseIssue {
   field: AlertField;
