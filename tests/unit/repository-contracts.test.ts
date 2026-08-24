@@ -37,6 +37,14 @@ import {
   type SaveDecisionInput,
   type SavedDecision,
 } from "@/features/decisions/server/decision-repository";
+import {
+  mapWatchCandidateRow,
+  type AdvanceWatchCandidateInput,
+  type RepositoryError as WatchCandidateRepositoryError,
+  type SaveWatchCandidateInput,
+  type SavedWatchCandidate,
+  type WatchCandidateRepository,
+} from "@/features/decisions/server/watch-candidate-repository";
 
 const createdAt = "2026-08-24T14:00:00.000Z";
 const updatedAt = "2026-08-24T14:01:00.000Z";
@@ -136,6 +144,36 @@ class InMemoryDecisionRepository implements DecisionRepository {
     const saved = { id: "decision-1", ...clone(input), createdAt, updatedAt };
     this.decisions.set(saved.id, clone(saved));
     return ok(clone(saved));
+  }
+}
+
+class InMemoryWatchCandidateRepository implements WatchCandidateRepository {
+  private candidates = new Map<string, SavedWatchCandidate>();
+
+  async saveCandidate(
+    input: SaveWatchCandidateInput,
+  ): Promise<Result<SavedWatchCandidate, WatchCandidateRepositoryError>> {
+    const saved: SavedWatchCandidate = {
+      id: "candidate-1",
+      ...clone(input),
+      status: input.status ?? "watching",
+      createdAt,
+      updatedAt,
+    };
+    this.candidates.set(saved.id, clone(saved));
+    return ok(clone(saved));
+  }
+
+  async advanceLatestAnalysis(
+    input: AdvanceWatchCandidateInput,
+  ): Promise<Result<SavedWatchCandidate, WatchCandidateRepositoryError>> {
+    const candidate = this.candidates.get(input.candidateId);
+    if (!candidate || candidate.userId !== input.userId) {
+      return err({ code: "not_found", message: "Watch candidate was not found" });
+    }
+    candidate.latestAnalysisId = input.latestAnalysisId;
+    candidate.updatedAt = updatedAt;
+    return ok(clone(candidate));
   }
 }
 
@@ -271,6 +309,61 @@ describe("repository contracts", () => {
       ok({ id: "decision-1", ...input, createdAt, updatedAt }),
     );
   });
+
+  it("round-trips Wait confirmation conditions and advances only the latest analysis pointer", async () => {
+    const repository = new InMemoryWatchCandidateRepository();
+    const unresolvedConfirmationConditions = [
+      {
+        id: "price-confirmation",
+        category: "technicalAlignment" as const,
+        description: "Price closes above the opening range high.",
+      },
+      {
+        id: "liquidity-confirmation",
+        category: "liquidity" as const,
+        description: "Bid-ask spread narrows below ten percent.",
+      },
+    ];
+
+    const saved = await repository.saveCandidate({
+      userId: "user-1",
+      tradeAlertId: "alert-1",
+      sourceAnalysisId: "analysis-1",
+      sourceAnalysisVerdict: "Wait",
+      latestAnalysisId: "analysis-1",
+      unresolvedConfirmationConditions,
+    });
+    expect(saved).toEqual(
+      ok({
+        id: "candidate-1",
+        userId: "user-1",
+        tradeAlertId: "alert-1",
+        sourceAnalysisId: "analysis-1",
+        sourceAnalysisVerdict: "Wait",
+        latestAnalysisId: "analysis-1",
+        unresolvedConfirmationConditions,
+        status: "watching",
+        createdAt,
+        updatedAt,
+      }),
+    );
+
+    expect(
+      await repository.advanceLatestAnalysis({
+        candidateId: "candidate-1",
+        userId: "user-1",
+        latestAnalysisId: "analysis-2",
+      }),
+    ).toEqual(
+      ok(
+        expect.objectContaining({
+          sourceAnalysisId: "analysis-1",
+          latestAnalysisId: "analysis-2",
+          unresolvedConfirmationConditions,
+        }),
+      ),
+    );
+  });
 });
 
 describe("snake_case row mappers", () => {
@@ -384,6 +477,42 @@ describe("snake_case row mappers", () => {
       quantity: 2,
       details: { note: "Recorded manually" },
       decidedAt: "2026-08-24T13:58:00.000Z",
+    });
+  });
+
+  it("maps a watch candidate without losing unresolved condition JSON", () => {
+    const unresolvedConfirmationConditions = [
+      {
+        id: "price-confirmation",
+        category: "technicalAlignment",
+        description: "Price closes above the opening range high.",
+      },
+    ];
+
+    expect(
+      mapWatchCandidateRow({
+        id: "candidate-1",
+        user_id: "user-1",
+        trade_alert_id: "alert-1",
+        source_analysis_id: "analysis-1",
+        source_analysis_verdict: "Wait",
+        latest_analysis_id: "analysis-2",
+        unresolved_confirmation_conditions: unresolvedConfirmationConditions,
+        status: "watching",
+        created_at: createdAt,
+        updated_at: updatedAt,
+      }),
+    ).toEqual({
+      id: "candidate-1",
+      userId: "user-1",
+      tradeAlertId: "alert-1",
+      sourceAnalysisId: "analysis-1",
+      sourceAnalysisVerdict: "Wait",
+      latestAnalysisId: "analysis-2",
+      unresolvedConfirmationConditions,
+      status: "watching",
+      createdAt,
+      updatedAt,
     });
   });
 });

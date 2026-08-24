@@ -113,6 +113,7 @@ describe("analyzeEntry", () => {
     const analysis = analyzeEntry(completeSupportiveInput());
 
     expect(analysis).toMatchObject({
+      modelVersion: "phase-1-v1",
       verdict: "Consider",
       score: 100,
       evidenceCoverage: 100,

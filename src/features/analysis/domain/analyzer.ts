@@ -16,10 +16,12 @@ import {
 } from "./factors";
 
 const scoreMeaning = "Evidence strength, not probability of profit";
+const modelVersion = "phase-1-v1" as const;
 
 export type EntryVerdict = "Consider" | "Wait" | "Pass";
 
 export interface EntryAnalysis {
+  modelVersion: typeof modelVersion;
   verdict: EntryVerdict;
   score: number;
   evidenceCoverage: number;
@@ -314,5 +316,5 @@ export const analyzeEntry = (input: AnalyzeEntryInput): EntryAnalysis => {
         ? "Consider"
         : "Wait";
 
-  return { verdict, score, evidenceCoverage, scoreMeaning, factors };
+  return { modelVersion, verdict, score, evidenceCoverage, scoreMeaning, factors };
 };
