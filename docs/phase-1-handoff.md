@@ -68,13 +68,11 @@ Use direct project executables, not the managed `pnpm` wrapper: in this desktop 
 
 Task 4’s required live migration/RLS check has not run. The first Supabase CLI attempt was sandbox-blocked from creating `C:\Users\rjsc\.supabase`; an elevated retry initially found no Docker installation.
 
-Docker Desktop 29.7.2 was installed on 2026-08-24. Its CLI is at `C:\Users\rjsc\AppData\Local\Programs\DockerDesktop\resources\bin\docker.exe`, but the Linux engine remains stopped. Fresh diagnostics show that Windows Subsystem for Linux is not installed, and Docker returns HTTP 500 from the `desktop-linux` named pipe.
+Docker Desktop 29.7.2 was installed on 2026-08-24. Its CLI is at `C:\Users\rjsc\AppData\Local\Programs\DockerDesktop\resources\bin\docker.exe`, but the Linux engine remains stopped and Docker returns HTTP 500 from the `desktop-linux` named pipe.
 
-Install WSL as an administrator, restart Windows if requested, and reopen Docker Desktop until `docker version` reports both Client and Server. The expected Windows command is:
+WSL was then installed successfully through an elevated Windows prompt. Fresh `wsl.exe --status` diagnostics now report that WSL2 cannot start because virtualization is not enabled. `Win32_Processor.VirtualizationFirmwareEnabled`, `VMMonitorModeExtensions`, and `SecondLevelAddressTranslationExtensions` all report `False` in the current boot.
 
-```text
-wsl.exe --install --no-distribution
-```
+Restart Windows first to finish applying the WSL/Virtual Machine Platform change. If Windows still reports virtualization disabled afterward, enable Intel Virtualization Technology (VT-x) in UEFI/BIOS, boot Windows, and reopen Docker Desktop until `docker version` reports both Client and Server.
 
 After Docker’s Linux engine is healthy, ensure its `resources\bin` directory is on `PATH` for the shell and run:
 
