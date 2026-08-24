@@ -32,7 +32,7 @@ export interface WatchCandidateCardProps {
   ) => Promise<Result<WatchCandidateRefresh, RepositoryError>>;
 }
 
-export const WatchCandidateCard = ({
+const WatchCandidateCardState = ({
   candidate,
   sourceAnalysis,
   sourceAnalyzedAt,
@@ -102,3 +102,7 @@ export const WatchCandidateCard = ({
     </article>
   );
 };
+
+export const WatchCandidateCard = (props: WatchCandidateCardProps) => (
+  <WatchCandidateCardState key={props.candidate.id} {...props} />
+);

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import "@testing-library/jest-dom/vitest";
-import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it } from "vitest";
 import type { EntryAnalysis } from "@/features/analysis/domain/analyzer";
@@ -19,6 +19,7 @@ import type {
   WatchCandidateRepository,
 } from "@/features/decisions/server/watch-candidate-repository";
 import { PurchaseDecision } from "@/features/decisions/ui/purchase-decision";
+import { WatchCandidateCard } from "@/features/decisions/ui/watch-candidate-card";
 import { err, ok, type Result } from "@/lib/result";
 
 const createdAt = "2026-08-24T14:00:00.000Z";
@@ -207,6 +208,47 @@ describe("PurchaseDecision", () => {
     ]);
   });
 
+  it("rejects date-only and timezone-less purchase timestamps (mutation: accept an ambiguous local purchase time)", async () => {
+    const user = userEvent.setup();
+    const repository = new InMemoryDecisionRepository();
+    renderDecision({ decisionRepository: repository });
+    await user.click(screen.getByRole("radio", { name: "Purchased" }));
+    await user.type(screen.getByRole("spinbutton", { name: "Actual fill" }), "1.32");
+    const timestamp = screen.getByRole("textbox", {
+      name: "Actual purchase timestamp",
+    });
+
+    for (const ambiguousTimestamp of ["2026-08-24", "2026-08-24T14:05:00"]) {
+      await user.clear(timestamp);
+      await user.type(timestamp, ambiguousTimestamp);
+      await user.click(screen.getByRole("button", { name: "Save decision" }));
+
+      expect(screen.getByRole("alert")).toHaveTextContent(
+        "Actual purchase timestamp must be an ISO date-time with Z or a numeric UTC offset.",
+      );
+    }
+    expect(repository.decisions).toEqual([]);
+  });
+
+  it("normalizes an explicit purchase timestamp offset to canonical UTC (mutation: persist the user's raw offset timestamp)", async () => {
+    const user = userEvent.setup();
+    const repository = new InMemoryDecisionRepository();
+    renderDecision({ decisionRepository: repository });
+    await user.click(screen.getByRole("radio", { name: "Purchased" }));
+    await user.type(screen.getByRole("spinbutton", { name: "Actual fill" }), "1.32");
+    await user.type(
+      screen.getByRole("textbox", { name: "Actual purchase timestamp" }),
+      "2026-08-24T14:05:00-04:00",
+    );
+
+    await user.click(screen.getByRole("button", { name: "Save decision" }));
+
+    await screen.findByText("Purchased decision saved.");
+    expect(repository.decisions[0]).toMatchObject({
+      decidedAt: "2026-08-24T18:05:00.000Z",
+    });
+  });
+
   it("saves a skipped decision without fill or quantity (mutation: require or retain purchase inputs for a declined trade)", async () => {
     const user = userEvent.setup();
     const repository = new InMemoryDecisionRepository();
@@ -224,6 +266,47 @@ describe("PurchaseDecision", () => {
         details: { modelVersion: "phase-1-v1" },
       }),
     ]);
+  });
+
+  it("allows only one decision write during an in-flight save and none after success (mutation: permit concurrent or repeated persistence)", async () => {
+    const user = userEvent.setup();
+    const writes: SaveDecisionInput[] = [];
+    let finishSave!: () => void;
+    const repository: DecisionRepository = {
+      saveDecision: (input) => {
+        writes.push(clone(input));
+        return new Promise((resolve) => {
+          finishSave = () => {
+            const saved: SavedDecision = {
+              id: "decision-1",
+              ...clone(input),
+              createdAt,
+              updatedAt,
+            };
+            resolve(ok(saved));
+          };
+        });
+      },
+    };
+    renderDecision({ decisionRepository: repository });
+    await user.click(screen.getByRole("radio", { name: "Skipped" }));
+    const form = screen.getByRole("button", { name: "Save decision" }).closest("form");
+    if (form === null) throw new Error("Expected decision form");
+
+    act(() => {
+      form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+      form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+
+    expect(writes).toHaveLength(1);
+    await act(async () => finishSave());
+    await screen.findByText("Skipped decision saved.");
+    expect(screen.getByRole("button", { name: "Decision saved" })).toBeDisabled();
+
+    act(() => {
+      form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+    expect(writes).toHaveLength(1);
   });
 
   it("guards Saved for review to Wait analyses (mutation: persist a non-Wait analysis as a watch candidate)", () => {
@@ -340,5 +423,82 @@ describe("PurchaseDecision", () => {
     await screen.findByText("Original analysis: Wait · 2026-08-24T13:50:00.000Z");
     await user.click(screen.getByRole("button", { name: "Refresh analysis" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Refresh failed");
+  });
+});
+
+describe("WatchCandidateCard candidate identity", () => {
+  afterEach(cleanup);
+
+  it("drops prior refresh state and refreshes the newly rendered candidate (mutation: prefer the prior refresh candidate after candidate replacement)", async () => {
+    const user = userEvent.setup();
+    const firstCandidate: SavedWatchCandidate = {
+      id: "candidate-1",
+      userId: "user-1",
+      tradeAlertId: "alert-1",
+      sourceAnalysisId: "analysis-1",
+      sourceAnalysisVerdict: "Wait",
+      latestAnalysisId: "analysis-1",
+      unresolvedConfirmationConditions: unresolvedConditions,
+      status: "watching",
+      createdAt,
+      updatedAt,
+    };
+    const secondCandidate: SavedWatchCandidate = {
+      ...firstCandidate,
+      id: "candidate-2",
+      tradeAlertId: "alert-2",
+      sourceAnalysisId: "analysis-3",
+      latestAnalysisId: "analysis-3",
+    };
+    const refreshedCandidateIds: string[] = [];
+    const onRefresh: React.ComponentProps<typeof WatchCandidateCard>["onRefresh"] =
+      async (candidate) => {
+        refreshedCandidateIds.push(candidate.id);
+        return ok({
+          candidate: {
+            ...candidate,
+            latestAnalysisId: `${candidate.sourceAnalysisId}-refreshed`,
+          },
+          beforeAnalysis: makeAnalysis("Wait"),
+          beforeAnalyzedAt: sourceAnalyzedAt,
+          latestAnalysis: makeAnalysis("Consider"),
+          latestAnalyzedAt:
+            candidate.id === "candidate-1"
+              ? "2026-08-24T14:10:00.000Z"
+              : "2026-08-24T14:20:00.000Z",
+          changedEvidence: [],
+        });
+      };
+
+    const { rerender } = render(
+      <WatchCandidateCard
+        candidate={firstCandidate}
+        sourceAnalysis={makeAnalysis("Wait")}
+        sourceAnalyzedAt={sourceAnalyzedAt}
+        onRefresh={onRefresh}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: "Refresh analysis" }));
+    await screen.findByText(
+      "Latest analysis: Consider · 2026-08-24T14:10:00.000Z",
+    );
+
+    rerender(
+      <WatchCandidateCard
+        candidate={secondCandidate}
+        sourceAnalysis={makeAnalysis("Wait")}
+        sourceAnalyzedAt="2026-08-24T14:15:00.000Z"
+        onRefresh={onRefresh}
+      />,
+    );
+
+    expect(
+      screen.queryByText("Latest analysis: Consider · 2026-08-24T14:10:00.000Z"),
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Refresh analysis" }));
+    await screen.findByText(
+      "Latest analysis: Consider · 2026-08-24T14:20:00.000Z",
+    );
+    expect(refreshedCandidateIds).toEqual(["candidate-1", "candidate-2"]);
   });
 });

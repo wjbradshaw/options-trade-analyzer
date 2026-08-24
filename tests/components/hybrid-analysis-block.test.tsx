@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import "@testing-library/jest-dom/vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it } from "vitest";
 import type { EntryAnalysis } from "@/features/analysis/domain/analyzer";
@@ -133,6 +133,37 @@ describe("HybridAnalysisBlock", () => {
     expect(blocking).toHaveTextContent(
       "Unverified — No verified technicalAlignment evidence was provided.",
     );
+  });
+
+  it("pairs each evidence status word with semantic color (mutation: remove the evidence status color channel)", () => {
+    render(
+      <HybridAnalysisBlock
+        analysis={analysis}
+        contract={{
+          symbol: "AAPL",
+          side: "call",
+          strike: 200,
+          expiration: "2026-09-18",
+          dte: 25,
+          optionPremium: 2.5,
+        }}
+      />,
+    );
+
+    const supporting = screen.getByRole("heading", { name: "Supporting evidence" })
+      .parentElement as HTMLElement;
+    const blocking = screen.getByRole("heading", { name: "Blocking evidence" })
+      .parentElement as HTMLElement;
+
+    expect(within(supporting).getAllByText("Supported")[0]).toHaveStyle({
+      color: "#2f9e44",
+    });
+    expect(within(blocking).getByText("Limited")).toHaveStyle({
+      color: "#b7791f",
+    });
+    expect(within(blocking).getByText("Unverified")).toHaveStyle({
+      color: "#c92a2a",
+    });
   });
 
   it("keeps provenance in a native expandable details disclosure (mutation: omit evidence source timestamps)", async () => {

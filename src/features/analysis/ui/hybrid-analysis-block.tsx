@@ -34,6 +34,12 @@ const statusLabels: Record<AnalysisFactor["status"], string> = {
   unverified: "Unverified",
 };
 
+const statusColors: Record<AnalysisFactor["status"], string> = {
+  supported: "#2f9e44",
+  limited: "#b7791f",
+  unverified: "#c92a2a",
+};
+
 const formatUsd = (amount: number): string =>
   new Intl.NumberFormat("en-US", {
     style: "currency",
@@ -57,7 +63,10 @@ const EvidenceGroup = ({
         {factors.map((factor) => (
           <li key={factor.category}>
             <strong>{factorLabels[factor.category]}:</strong>{" "}
-            {statusLabels[factor.status]} — {factor.summary}
+            <span style={{ color: statusColors[factor.status] }}>
+              {statusLabels[factor.status]}
+            </span>{" "}
+            — {factor.summary}
           </li>
         ))}
       </ul>

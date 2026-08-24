@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { PostgrestError, type SupabaseClient } from "@supabase/supabase-js";
 import { err, ok, type Result } from "@/lib/result";
 import type { ParsedTradeAlert } from "@/features/alerts/domain/types";
 import {
@@ -39,17 +40,82 @@ import {
 } from "@/features/decisions/server/decision-repository";
 import {
   mapWatchCandidateRow,
+  SupabaseWatchCandidateRepository,
   type AdvanceWatchCandidateInput,
   type RepositoryError as WatchCandidateRepositoryError,
   type SaveWatchCandidateInput,
   type SavedWatchCandidate,
   type WatchCandidateRepository,
 } from "@/features/decisions/server/watch-candidate-repository";
+import type { Database, TableRow } from "@/lib/supabase/database.types";
 
 const createdAt = "2026-08-24T14:00:00.000Z";
 const updatedAt = "2026-08-24T14:01:00.000Z";
 
 const clone = <T>(value: T): T => structuredClone(value);
+
+interface ObservedWatchCandidateQuery {
+  table: string;
+  operation: "insert" | "update" | null;
+  payload: unknown;
+  filters: Array<{ column: string; value: string }>;
+  selection: string | null;
+}
+
+interface WatchCandidateQueryResponse {
+  data: TableRow<"watch_candidates"> | null;
+  error: PostgrestError | null;
+}
+
+const createWatchCandidateSupabaseFake = (
+  responses: WatchCandidateQueryResponse[],
+): {
+  client: SupabaseClient<Database>;
+  queries: ObservedWatchCandidateQuery[];
+} => {
+  const queries: ObservedWatchCandidateQuery[] = [];
+  const pendingResponses = [...responses];
+  const client = {
+    from: (table: string) => {
+      const query: ObservedWatchCandidateQuery = {
+        table,
+        operation: null,
+        payload: null,
+        filters: [],
+        selection: null,
+      };
+      queries.push(query);
+      const builder = {
+        insert: (payload: unknown) => {
+          query.operation = "insert";
+          query.payload = clone(payload);
+          return builder;
+        },
+        update: (payload: unknown) => {
+          query.operation = "update";
+          query.payload = clone(payload);
+          return builder;
+        },
+        eq: (column: string, value: string) => {
+          query.filters.push({ column, value });
+          return builder;
+        },
+        select: (selection: string) => {
+          query.selection = selection;
+          return builder;
+        },
+        single: async () => {
+          const response = pendingResponses.shift();
+          if (response === undefined) throw new Error("Missing fake Supabase response");
+          return response;
+        },
+      };
+      return builder;
+    },
+  } as unknown as SupabaseClient<Database>;
+
+  return { client, queries };
+};
 
 class InMemoryProfileRepository implements ProfileRepository {
   private profile: Profile | null = null;
@@ -514,5 +580,136 @@ describe("snake_case row mappers", () => {
       createdAt,
       updatedAt,
     });
+  });
+});
+
+describe("SupabaseWatchCandidateRepository", () => {
+  const unresolvedConfirmationConditions = [
+    {
+      id: "price-confirmation",
+      category: "technicalAlignment" as const,
+      description: "Price closes above the opening range high.",
+    },
+  ];
+  const watchCandidateRow: TableRow<"watch_candidates"> = {
+    id: "candidate-1",
+    user_id: "user-1",
+    trade_alert_id: "alert-1",
+    source_analysis_id: "analysis-1",
+    source_analysis_verdict: "Wait",
+    latest_analysis_id: "analysis-1",
+    unresolved_confirmation_conditions: unresolvedConfirmationConditions,
+    status: "watching",
+    created_at: createdAt,
+    updated_at: updatedAt,
+  };
+
+  it("emits the complete candidate insert and maps the saved Supabase row (mutation: drop a persisted field or skip snake-case mapping)", async () => {
+    const { client, queries } = createWatchCandidateSupabaseFake([
+      { data: watchCandidateRow, error: null },
+    ]);
+    const repository = new SupabaseWatchCandidateRepository(client);
+
+    const result = await repository.saveCandidate({
+      userId: "user-1",
+      tradeAlertId: "alert-1",
+      sourceAnalysisId: "analysis-1",
+      sourceAnalysisVerdict: "Wait",
+      latestAnalysisId: "analysis-1",
+      unresolvedConfirmationConditions,
+    });
+
+    expect(queries).toEqual([
+      {
+        table: "watch_candidates",
+        operation: "insert",
+        payload: {
+          user_id: "user-1",
+          trade_alert_id: "alert-1",
+          source_analysis_id: "analysis-1",
+          source_analysis_verdict: "Wait",
+          latest_analysis_id: "analysis-1",
+          unresolved_confirmation_conditions: unresolvedConfirmationConditions,
+          status: "watching",
+        },
+        filters: [],
+        selection: "*",
+      },
+    ]);
+    expect(result).toEqual(
+      ok({
+        id: "candidate-1",
+        userId: "user-1",
+        tradeAlertId: "alert-1",
+        sourceAnalysisId: "analysis-1",
+        sourceAnalysisVerdict: "Wait",
+        latestAnalysisId: "analysis-1",
+        unresolvedConfirmationConditions,
+        status: "watching",
+        createdAt,
+        updatedAt,
+      }),
+    );
+  });
+
+  it("updates only latest_analysis_id and scopes by candidate plus user (mutation: overwrite source history or omit an ownership filter)", async () => {
+    const latestRow = { ...watchCandidateRow, latest_analysis_id: "analysis-2" };
+    const { client, queries } = createWatchCandidateSupabaseFake([
+      { data: latestRow, error: null },
+    ]);
+    const repository = new SupabaseWatchCandidateRepository(client);
+
+    const result = await repository.advanceLatestAnalysis({
+      candidateId: "candidate-1",
+      userId: "user-1",
+      latestAnalysisId: "analysis-2",
+    });
+
+    expect(queries).toEqual([
+      {
+        table: "watch_candidates",
+        operation: "update",
+        payload: { latest_analysis_id: "analysis-2" },
+        filters: [
+          { column: "id", value: "candidate-1" },
+          { column: "user_id", value: "user-1" },
+        ],
+        selection: "*",
+      },
+    ]);
+    expect(result).toEqual(
+      ok(
+        expect.objectContaining({
+          sourceAnalysisId: "analysis-1",
+          latestAnalysisId: "analysis-2",
+        }),
+      ),
+    );
+  });
+
+  it("maps a Supabase failure to the repository error contract (mutation: throw or expose the raw external error)", async () => {
+    const externalError = new PostgrestError({
+      code: "23503",
+      message: "Watch candidate insert failed",
+      details: "Foreign key violation",
+      hint: "",
+    });
+    const { client } = createWatchCandidateSupabaseFake([
+      { data: null, error: externalError },
+    ]);
+    const repository = new SupabaseWatchCandidateRepository(client);
+
+    expect(
+      await repository.saveCandidate({
+        userId: "user-1",
+        tradeAlertId: "alert-1",
+        sourceAnalysisId: "analysis-1",
+        sourceAnalysisVerdict: "Wait",
+        latestAnalysisId: "analysis-1",
+        unresolvedConfirmationConditions,
+      }),
+    ).toEqual(
+      err({ code: "database", message: "Watch candidate insert failed" }),
+    );
   });
 });
