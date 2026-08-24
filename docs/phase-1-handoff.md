@@ -21,7 +21,7 @@ The approved specification resolves any conflict with the plan or this handoff.
 
 - Workspace: `C:\Users\rjsc\Documents\Codex\2026-08-17\options-trade-analyzer`
 - Branch: `phase-1-entry-analyzer`
-- Current implementation head: `bf0489a fix: harden alert confirmation flow`
+- Current implementation head: `8b45705 fix: harden decision persistence and refresh`
 - No remote push, merge, or deployment has been performed.
 
 ## Phase One constraints that must remain intact
@@ -46,28 +46,31 @@ The approved specification resolves any conflict with the plan or this handoff.
 | 5. Manual market snapshot and freshness policy | Reviewed complete | `96cd599`, `6686a94` |
 | 6. Deterministic evidence scoring and verdicts | Reviewed complete | `37a3cc3`, `7e3a5d9`, `9a4b480` |
 | 7. Alert intake and confirmation interface | Reviewed complete | `b2ad363`, `bf0489a` |
+| 8. Hybrid analysis block and purchase decision | Reviewed complete | `ce99f2c`, `8b45705` |
 
 Task 4 includes a passwordless Supabase login/callback, typed client/server repositories, a Phase One migration with RLS and tenant-safe foreign keys, confirmed-contract enforcement before persisted analyses, and `Wait` candidate integrity. Its review/fix loop closed with no open code findings.
 
 ## Fresh verification evidence
 
-At Task 7 head (`bf0489a`), the controller ran successfully:
+At Task 8 head (`8b45705`), the controller ran successfully:
 
 ```powershell
-node_modules/.bin/vitest.cmd run tests/components/alert-intake.test.tsx tests/unit/alert-validation.test.ts
-                                                 # 2 files, 11 tests passed
-node_modules/.bin/vitest.cmd run                 # 13 files, 88 tests passed
+node_modules/.bin/vitest.cmd run tests/components/hybrid-analysis-block.test.tsx tests/components/purchase-decision.test.tsx tests/unit/repository-contracts.test.ts tests/unit/analyzer.test.ts
+                                                 # 4 files, 49 tests passed
+node_modules/.bin/vitest.cmd run                 # 15 files, 109 tests passed
 node_modules/.bin/eslint.cmd .                   # exit 0
 node_modules/.bin/tsc.cmd --noEmit               # exit 0
 $env:NEXT_PUBLIC_SUPABASE_URL='http://127.0.0.1:54321'
 $env:NEXT_PUBLIC_SUPABASE_ANON_KEY='test-anon-key'
 node_modules/.bin/next.cmd build                 # exit 0
-git diff --check 3a63917..HEAD                   # exit 0
+git diff --check 1ce0221..HEAD                   # exit 0
 ```
 
-Task 7 adds the reusable manual alert-intake flow: paste and parse, raw-text preview, corrected ticker/call-put/strike/expiration/premium fields, existing or newly created trader-source selection, visible field-level errors, and one `Analyze entry` confirmation action. Analysis remains blocked until the four critical fields are complete, the corrected expiration is a valid parser-compatible `MM/DD` date, and a trader source is selected. A late initial trader-source list can no longer erase a source created while the list was loading. Independent review closed one fix round with no open Critical or Important findings.
+Task 8 adds the decision-first hybrid analysis presentation and purchase-decision flow. It shows the exact Consider/Wait/Pass verdict, setup-evidence percentage and disclaimer, contract/DTE/break-even/maximum-loss/catalyst facts, supporting and blocking evidence with text-plus-color statuses, and source timestamps in native expandable detail. Purchased decisions require a positive fill, quantity one through three, and an explicit timezone-bearing timestamp normalized to UTC; Purchased and Skipped persist the exact `phase-1-v1` model version and are protected against duplicate writes.
 
-Task 7 components are intentionally not routed yet; Task 9 owns page orchestration. Browser desktop/mobile page QA must occur there rather than adding a temporary out-of-plan route now.
+Saved for review remains separate from purchased/skipped decisions through a typed watch-candidate repository over the existing Task 4 table. It is Wait-only, preserves every unresolved confirmation condition and immutable source analysis, and exposes a manual Refresh analysis callback contract that advances only the latest-analysis pointer after a new snapshot and analysis are persisted. The card shows before/after verdicts, evidence changes, and timestamps. No polling, automatic re-evaluation, push, brokerage action, or Phase Two behavior was added. Independent review closed one fix round with no open Critical or Important findings.
+
+Tasks 7 and 8 components are intentionally not routed yet; Task 9 owns server orchestration and dashboard composition. Browser desktop/mobile page QA must occur there rather than adding a temporary out-of-plan route now.
 
 Task 4's clean reset and 12 live pgTAP assertions remain the latest database-policy evidence; Tasks 5 and 6 did not change persistence.
 
@@ -87,7 +90,7 @@ Supabase CLI state under `supabase/.temp/` and `supabase/.branches/` is generate
 
 ## Next implementation step
 
-Start **Task 8: Hybrid analysis block and purchase decision** from the approved plan. Follow the existing workflow: test-first implementation, commit, independent task review, fix loop if needed, fresh verification, then update this handoff and the SDD ledger. Task 8 has not started.
+Start **Task 9: Server orchestration and dashboard workflow** from the approved plan. Follow the existing workflow: test-first implementation, commit, independent task review, fix loop if needed, fresh verification, then update this handoff and the SDD ledger. Task 9 has not started.
 
 ## Known non-blocking follow-ups
 
@@ -97,3 +100,4 @@ Start **Task 8: Hybrid analysis block and purchase decision** from the approved 
 - Task 7's combined missing-field test does not independently cover missing ticker, expiration, and trader source. Reconsider expanding the gate matrix during final review or Task 9 integration.
 - Task 7's raw-text `<pre>` needs explicit narrow-screen wrapping or overflow protection when it is placed in the styled Task 9 dashboard.
 - Task 7's strike input advertises native `min="0"` while its conversion rejects zero; align that constraint during the next UI integration or final review.
+- Task 8's `PurchaseDecision` is large because it owns three decision branches, validation, two persistence paths, and candidate rendering. During Task 9 integration or final review, consider extracting focused internal subforms/handlers only if that reduces risk without changing the planned public boundary.
