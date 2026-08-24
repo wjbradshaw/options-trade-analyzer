@@ -21,7 +21,7 @@ The approved specification resolves any conflict with the plan or this handoff.
 
 - Workspace: `C:\Users\rjsc\Documents\Codex\2026-08-17\options-trade-analyzer`
 - Branch: `phase-1-entry-analyzer`
-- Current implementation head: `0dea911 test: strengthen persistence relationship coverage`
+- Current implementation head: `6686a94 fix: validate manual snapshot freshness`
 - No remote push, merge, or deployment has been performed.
 
 ## Phase One constraints that must remain intact
@@ -43,26 +43,29 @@ The approved specification resolves any conflict with the plan or this handoff.
 | 2. Alert parser and critical-field validation | Reviewed complete | `277ca07`, `d3ff9f0` |
 | 3. Calculations and risk rules | Reviewed complete | `7a26215` |
 | 4. Supabase schema, auth, repositories | Reviewed complete; live verification passed | `7971005`, `0201d46`, `defec07`, `0dea911` |
+| 5. Manual market snapshot and freshness policy | Reviewed complete | `96cd599`, `6686a94` |
 
 Task 4 includes a passwordless Supabase login/callback, typed client/server repositories, a Phase One migration with RLS and tenant-safe foreign keys, confirmed-contract enforcement before persisted analyses, and `Wait` candidate integrity. Its review/fix loop closed with no open code findings.
 
 ## Fresh verification evidence
 
-At Task 4 head (`0dea911`), the controller ran successfully:
+At Task 5 head (`6686a94`), the controller ran successfully:
 
 ```powershell
-node_modules/.bin/supabase.cmd db reset          # migration reapplied from scratch
-node_modules/.bin/supabase.cmd test db           # 1 file, 12 pgTAP assertions passed
-node_modules/.bin/vitest.cmd run                 # 9 files, 47 tests passed
+node_modules/.bin/vitest.cmd run tests/unit/market-snapshot.test.ts tests/components/manual-snapshot-form.test.tsx
+                                                 # 2 files, 17 tests passed
+node_modules/.bin/vitest.cmd run                 # 11 files, 64 tests passed
 node_modules/.bin/eslint.cmd .                   # exit 0
 node_modules/.bin/tsc.cmd --noEmit               # exit 0
 $env:NEXT_PUBLIC_SUPABASE_URL='http://127.0.0.1:54321'
 $env:NEXT_PUBLIC_SUPABASE_ANON_KEY='test-anon-key'
 node_modules/.bin/next.cmd build                 # exit 0
-git diff --check 7a26215..HEAD                   # exit 0
+git diff --check bca7ce8..HEAD                   # exit 0
 ```
 
-The live tests verify exact authenticated CRUD privileges on all seven user tables, no anonymous table privileges, all 28 ownership policies with RLS enabled, representative cross-tenant denial, confirmed-alert enforcement, and valid/invalid `Wait` candidate relationships. Independent review was clean after two live-verification fix rounds.
+Task 5 provides a Zod-validated manual snapshot, a narrow provider boundary, deterministic freshness evaluation, and an accessible user-entered snapshot form. Zero- and one-DTE submissions are blocked unless both prices are positive. For longer-dated snapshots, the recorded Phase One ruling is: up to 15 minutes `fresh`, more than 15 minutes through 24 hours `delayed`, and more than 24 hours `stale`. Independent review closed one fix round with no open findings.
+
+Task 4's clean reset and 12 live pgTAP assertions remain the latest database-policy evidence; Task 5 did not change persistence.
 
 The build emits the known Next 16 warning that `middleware.ts` is deprecated in favor of `proxy.ts`. Keep `middleware.ts` for now because the approved Task 4 plan explicitly requires it; do not migrate without a plan update.
 
@@ -80,7 +83,7 @@ Supabase CLI state under `supabase/.temp/` and `supabase/.branches/` is generate
 
 ## Next implementation step
 
-Start **Task 5: Manual market snapshot and freshness policy** from the approved plan. Follow the existing workflow: test-first implementation, commit, independent task review, fix loop if needed, fresh verification, then update this handoff and the SDD ledger. Task 5 has not started.
+Start **Task 6: Deterministic evidence scoring and verdicts** from the approved plan. Follow the existing workflow: test-first implementation, commit, independent task review, fix loop if needed, fresh verification, then update this handoff and the SDD ledger. Task 6 has not started.
 
 ## Known non-blocking follow-ups
 
