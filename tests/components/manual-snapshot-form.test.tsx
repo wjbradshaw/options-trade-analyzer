@@ -51,7 +51,77 @@ describe("ManualSnapshotForm", () => {
     });
   });
 
-  it("shows the deterministic confirmation time after a successful submission (mutation: omit the visible capture-time confirmation)", async () => {
+  it("blocks a blank zero-DTE submission and names both missing user-entered fields (mutation: confirm before evaluating short-DTE freshness)", async () => {
+    const user = userEvent.setup();
+    const onConfirm = vi.fn();
+
+    render(
+      <ManualSnapshotForm
+        dte={0}
+        now={() => new Date("2026-08-14T15:00:00.000Z")}
+        onConfirm={onConfirm}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Confirm market snapshot" }));
+
+    expect(onConfirm).not.toHaveBeenCalled();
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "User-entered option premium and user-entered underlying price are required for zero- or one-DTE snapshots.",
+    );
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  });
+
+  it("rejects a non-positive user-entered price with an accessible field-specific error (mutation: accept a zero price after form submission)", async () => {
+    const user = userEvent.setup();
+    const onConfirm = vi.fn();
+
+    render(
+      <ManualSnapshotForm
+        dte={1}
+        now={() => new Date("2026-08-14T15:00:00.000Z")}
+        onConfirm={onConfirm}
+      />,
+    );
+
+    await user.type(
+      screen.getByRole("spinbutton", { name: "User-entered option premium" }),
+      "0",
+    );
+    await user.type(
+      screen.getByRole("spinbutton", { name: "User-entered underlying price" }),
+      "7800",
+    );
+    await user.click(screen.getByRole("button", { name: "Confirm market snapshot" }));
+
+    expect(onConfirm).not.toHaveBeenCalled();
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "User-entered option premium must be a positive number.",
+    );
+  });
+
+  it("allows a blank longer-dated snapshot (mutation: apply the short-DTE price block to all DTE values)", async () => {
+    const user = userEvent.setup();
+    const onConfirm = vi.fn();
+
+    render(
+      <ManualSnapshotForm
+        dte={5}
+        now={() => new Date("2026-08-14T15:00:00.000Z")}
+        onConfirm={onConfirm}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Confirm market snapshot" }));
+
+    expect(onConfirm).toHaveBeenCalledWith({
+      optionPremium: null,
+      underlyingPrice: null,
+      confirmedAt: "2026-08-14T15:00:00.000Z",
+    });
+  });
+
+  it("shows capture time and freshness after a successful longer-dated submission (mutation: omit the visible capture-time confirmation)", async () => {
     const user = userEvent.setup();
 
     render(
@@ -65,7 +135,7 @@ describe("ManualSnapshotForm", () => {
     await user.click(screen.getByRole("button", { name: "Confirm market snapshot" }));
 
     expect(screen.getByRole("status")).toHaveTextContent(
-      "Confirmed at: 2026-08-14T15:00:00.000Z",
+      "Confirmed at: 2026-08-14T15:00:00.000Z. Freshness: fresh.",
     );
   });
 });

@@ -25,18 +25,21 @@ export interface FreshnessInput extends MarketSnapshot {
 const freshAgeMilliseconds = 15 * 60 * 1000;
 const delayedAgeMilliseconds = 24 * 60 * 60 * 1000;
 
+const isPositivePrice = (value: number | null): boolean =>
+  value !== null && Number.isFinite(value) && value > 0;
+
 export const evaluateFreshness = (
   { dte, optionPremium, underlyingPrice, confirmedAt }: FreshnessInput,
-  now: Date = new Date(),
+  now: Date,
 ): FreshnessEvaluation => {
   if (dte === 0 || dte === 1) {
     const missing: RequiredSnapshotPrice[] = [];
 
-    if (optionPremium === null) {
+    if (!isPositivePrice(optionPremium)) {
       missing.push("optionPremium");
     }
 
-    if (underlyingPrice === null) {
+    if (!isPositivePrice(underlyingPrice)) {
       missing.push("underlyingPrice");
     }
 

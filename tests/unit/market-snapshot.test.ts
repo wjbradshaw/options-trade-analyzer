@@ -3,12 +3,80 @@ import {
   MarketSnapshotSchema,
   evaluateFreshness,
 } from "@/features/market/domain/snapshot";
+import type {
+  FreshnessEvaluation,
+  FreshnessInput,
+} from "@/features/market/domain/snapshot";
 import type { MarketProvider } from "@/features/market/server/market-provider";
 import { ManualMarketProvider } from "@/features/market/server/manual-market-provider";
 
 const now = new Date("2026-08-14T15:00:00.000Z");
 
 describe("evaluateFreshness", () => {
+  it("blocks zero, negative, and non-finite short-DTE prices in stable field order (mutation: treat every non-null price as present)", () => {
+    const invalidSnapshots: Array<{
+      input: FreshnessInput;
+      expected: FreshnessEvaluation;
+    }> = [
+      {
+        input: {
+          dte: 1,
+          optionPremium: 0,
+          underlyingPrice: 7800,
+          confirmedAt: now.toISOString(),
+        },
+        expected: { status: "blocked", missing: ["optionPremium"] },
+      },
+      {
+        input: {
+          dte: 0,
+          optionPremium: -2.7,
+          underlyingPrice: -7800,
+          confirmedAt: now.toISOString(),
+        },
+        expected: {
+          status: "blocked",
+          missing: ["optionPremium", "underlyingPrice"],
+        },
+      },
+      {
+        input: {
+          dte: 1,
+          optionPremium: Number.NaN,
+          underlyingPrice: Number.POSITIVE_INFINITY,
+          confirmedAt: now.toISOString(),
+        },
+        expected: {
+          status: "blocked",
+          missing: ["optionPremium", "underlyingPrice"],
+        },
+      },
+    ];
+
+    for (const { input, expected } of invalidSnapshots) {
+      expect(evaluateFreshness(input, now)).toEqual(expected);
+    }
+  });
+
+  it("requires callers to supply the evaluation time and uses it to determine freshness (mutation: reintroduce an implicit current-time default)", () => {
+    const input: FreshnessInput = {
+      dte: 5,
+      optionPremium: null,
+      underlyingPrice: null,
+      confirmedAt: "2026-08-14T14:45:00.000Z",
+    };
+
+    expect(evaluateFreshness(input, now)).toEqual({ status: "fresh" });
+    expect(
+      evaluateFreshness(input, new Date("2026-08-15T14:45:00.001Z")),
+    ).toEqual({ status: "stale" });
+
+    if (false) {
+      // @ts-expect-error evaluateFreshness requires an explicit evaluation time.
+      evaluateFreshness(input);
+    }
+  });
+
   it("blocks a one-DTE snapshot with only the missing premium first (mutation: remove short-dated premium guard)", () => {
     expect(
       evaluateFreshness(

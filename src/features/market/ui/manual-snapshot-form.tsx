@@ -4,7 +4,9 @@ import { useState } from "react";
 import {
   MarketSnapshotSchema,
   evaluateFreshness,
+  type FreshnessEvaluation,
   type MarketSnapshot,
+  type RequiredSnapshotPrice,
 } from "@/features/market/domain/snapshot";
 
 export interface ManualSnapshotFormProps {
@@ -16,6 +18,27 @@ export interface ManualSnapshotFormProps {
 const parseOptionalPrice = (value: string): number | null =>
   value === "" ? null : Number(value);
 
+const fieldLabels: Record<RequiredSnapshotPrice, string> = {
+  optionPremium: "User-entered option premium",
+  underlyingPrice: "user-entered underlying price",
+};
+
+const joinFieldLabels = (fields: RequiredSnapshotPrice[]): string =>
+  fields.map((field) => fieldLabels[field]).join(" and ");
+
+const invalidPriceMessage = (optionPremium: number | null, underlyingPrice: number | null): string => {
+  const invalidFields = (Object.entries({ optionPremium, underlyingPrice }) as Array<
+    [RequiredSnapshotPrice, number | null]
+  >)
+    .filter(([, value]) => value !== null && (!Number.isFinite(value) || value <= 0))
+    .map(([field]) => field);
+
+  const fields = joinFieldLabels(invalidFields);
+  return invalidFields.length === 1
+    ? `${fields} must be a positive number.`
+    : `${fields} must be positive numbers.`;
+};
+
 export const ManualSnapshotForm = ({
   dte,
   now = () => new Date(),
@@ -24,30 +47,43 @@ export const ManualSnapshotForm = ({
   const [optionPremium, setOptionPremium] = useState("");
   const [underlyingPrice, setUnderlyingPrice] = useState("");
   const [confirmation, setConfirmation] = useState<MarketSnapshot | null>(null);
+  const [freshness, setFreshness] = useState<FreshnessEvaluation | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const submit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const confirmedAt = now().toISOString();
+    const evaluationNow = now();
+    const parsedOptionPremium = parseOptionalPrice(optionPremium);
+    const parsedUnderlyingPrice = parseOptionalPrice(underlyingPrice);
     const parsed = MarketSnapshotSchema.safeParse({
-      optionPremium: parseOptionalPrice(optionPremium),
-      underlyingPrice: parseOptionalPrice(underlyingPrice),
-      confirmedAt,
+      optionPremium: parsedOptionPremium,
+      underlyingPrice: parsedUnderlyingPrice,
+      confirmedAt: evaluationNow.toISOString(),
     });
 
     if (!parsed.success) {
-      setError("Enter positive values for each supplied user-entered price.");
+      setError(invalidPriceMessage(parsedOptionPremium, parsedUnderlyingPrice));
       setConfirmation(null);
+      setFreshness(null);
+      return;
+    }
+
+    const evaluation = evaluateFreshness({ ...parsed.data, dte }, evaluationNow);
+
+    if (evaluation.status === "blocked") {
+      setError(
+        `${joinFieldLabels(evaluation.missing)} are required for zero- or one-DTE snapshots.`,
+      );
+      setConfirmation(null);
+      setFreshness(null);
       return;
     }
 
     setError(null);
     setConfirmation(parsed.data);
+    setFreshness(evaluation);
     onConfirm(parsed.data);
   };
-
-  const freshness =
-    confirmation === null ? null : evaluateFreshness({ ...confirmation, dte }, now());
 
   return (
     <form onSubmit={submit}>
@@ -57,7 +93,6 @@ export const ManualSnapshotForm = ({
           id="option-premium"
           name="optionPremium"
           type="number"
-          min="0"
           step="any"
           value={optionPremium}
           onChange={(event) => setOptionPremium(event.target.value)}
@@ -69,7 +104,6 @@ export const ManualSnapshotForm = ({
           id="underlying-price"
           name="underlyingPrice"
           type="number"
-          min="0"
           step="any"
           value={underlyingPrice}
           onChange={(event) => setUnderlyingPrice(event.target.value)}
