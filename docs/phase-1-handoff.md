@@ -21,7 +21,7 @@ The approved specification resolves any conflict with the plan or this handoff.
 
 - Workspace: `C:\Users\rjsc\Documents\Codex\2026-08-17\options-trade-analyzer`
 - Branch: `phase-1-entry-analyzer`
-- Current implementation head: `9a4b480 fix: prioritize invalid evidence provenance`
+- Current implementation head: `bf0489a fix: harden alert confirmation flow`
 - No remote push, merge, or deployment has been performed.
 
 ## Phase One constraints that must remain intact
@@ -45,26 +45,29 @@ The approved specification resolves any conflict with the plan or this handoff.
 | 4. Supabase schema, auth, repositories | Reviewed complete; live verification passed | `7971005`, `0201d46`, `defec07`, `0dea911` |
 | 5. Manual market snapshot and freshness policy | Reviewed complete | `96cd599`, `6686a94` |
 | 6. Deterministic evidence scoring and verdicts | Reviewed complete | `37a3cc3`, `7e3a5d9`, `9a4b480` |
+| 7. Alert intake and confirmation interface | Reviewed complete | `b2ad363`, `bf0489a` |
 
 Task 4 includes a passwordless Supabase login/callback, typed client/server repositories, a Phase One migration with RLS and tenant-safe foreign keys, confirmed-contract enforcement before persisted analyses, and `Wait` candidate integrity. Its review/fix loop closed with no open code findings.
 
 ## Fresh verification evidence
 
-At Task 6 head (`9a4b480`), the controller ran successfully:
+At Task 7 head (`bf0489a`), the controller ran successfully:
 
 ```powershell
-node_modules/.bin/vitest.cmd run tests/unit/analyzer.test.ts
-                                                 # 1 file, 16 tests passed
-node_modules/.bin/vitest.cmd run                 # 12 files, 80 tests passed
+node_modules/.bin/vitest.cmd run tests/components/alert-intake.test.tsx tests/unit/alert-validation.test.ts
+                                                 # 2 files, 11 tests passed
+node_modules/.bin/vitest.cmd run                 # 13 files, 88 tests passed
 node_modules/.bin/eslint.cmd .                   # exit 0
 node_modules/.bin/tsc.cmd --noEmit               # exit 0
 $env:NEXT_PUBLIC_SUPABASE_URL='http://127.0.0.1:54321'
 $env:NEXT_PUBLIC_SUPABASE_ANON_KEY='test-anon-key'
 node_modules/.bin/next.cmd build                 # exit 0
-git diff --check 35ab69f..HEAD                   # exit 0
+git diff --check 3a63917..HEAD                   # exit 0
 ```
 
-Task 6 implements the fixed 100-point evidence model and exact `Consider`, `Wait`, and `Pass` boundaries. The displayed score is earned points divided by verified available points; evidence coverage remains separate so sparse evidence cannot appear complete. Contextual factors require explicit bounded support and valid provenance rather than inferred market heuristics. Incomplete contracts, malformed DTE, and blocked short-dated snapshots produce no score or verdict. Independent review closed two fix rounds with no open Critical or Important findings.
+Task 7 adds the reusable manual alert-intake flow: paste and parse, raw-text preview, corrected ticker/call-put/strike/expiration/premium fields, existing or newly created trader-source selection, visible field-level errors, and one `Analyze entry` confirmation action. Analysis remains blocked until the four critical fields are complete, the corrected expiration is a valid parser-compatible `MM/DD` date, and a trader source is selected. A late initial trader-source list can no longer erase a source created while the list was loading. Independent review closed one fix round with no open Critical or Important findings.
+
+Task 7 components are intentionally not routed yet; Task 9 owns page orchestration. Browser desktop/mobile page QA must occur there rather than adding a temporary out-of-plan route now.
 
 Task 4's clean reset and 12 live pgTAP assertions remain the latest database-policy evidence; Tasks 5 and 6 did not change persistence.
 
@@ -84,10 +87,13 @@ Supabase CLI state under `supabase/.temp/` and `supabase/.branches/` is generate
 
 ## Next implementation step
 
-Start **Task 7: Alert intake and confirmation interface** from the approved plan. Follow the existing workflow: test-first implementation, commit, independent task review, fix loop if needed, fresh verification, then update this handoff and the SDD ledger. Task 7 has not started.
+Start **Task 8: Hybrid analysis block and purchase decision** from the approved plan. Follow the existing workflow: test-first implementation, commit, independent task review, fix loop if needed, fresh verification, then update this handoff and the SDD ledger. Task 8 has not started.
 
 ## Known non-blocking follow-ups
 
 - `pnpm-workspace.yaml` retains pnpm’s generated `unrs-resolver` build-approval placeholder; it has no product behavior impact.
 - Replace `src/lib/supabase/database.types.ts` with generated Supabase types once a database environment is available, after comparing generated and hand-maintained shapes.
 - Task 6's fixed weights and returned factor arrays are readonly at compile time but are not frozen at runtime. This deferred Minor should be reconsidered during the final whole-branch review.
+- Task 7's combined missing-field test does not independently cover missing ticker, expiration, and trader source. Reconsider expanding the gate matrix during final review or Task 9 integration.
+- Task 7's raw-text `<pre>` needs explicit narrow-screen wrapping or overflow protection when it is placed in the styled Task 9 dashboard.
+- Task 7's strike input advertises native `min="0"` while its conversion rejects zero; align that constraint during the next UI integration or final review.
