@@ -6,3 +6,5 @@ test-results/
 .env
 work/
 *.tsbuildinfo
+supabase/.temp/
+supabase/.branches/
