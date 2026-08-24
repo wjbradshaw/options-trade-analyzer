@@ -1,4 +1,5 @@
 import { ok } from "@/lib/result";
+import { isValidAlertExpiration } from "./validation";
 import type {
   AlertField,
   OptionSide,
@@ -64,13 +65,6 @@ const toOptionSide = (value: string): OptionSide =>
 const isPositiveFiniteNumber = (value: number): boolean =>
   Number.isFinite(value) && value > 0;
 
-const isValidExpiration = (value: string): boolean => {
-  const [month, day] = value.split("/").map(Number);
-  const daysInMonth = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
-
-  return month >= 1 && month <= 12 && day >= 1 && day <= daysInMonth[month - 1];
-};
-
 const oneValidValue = <T>(
   values: T[],
   isValid: (value: T) => boolean,
@@ -130,7 +124,7 @@ export const parseTradeAlert = (
   );
   const expiration = oneValidValue(
     matches(expirationPattern, rawText).map((match) => match[1]),
-    isValidExpiration,
+    isValidAlertExpiration,
     "expiration",
     issues,
   );

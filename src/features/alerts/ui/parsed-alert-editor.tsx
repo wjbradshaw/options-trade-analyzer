@@ -1,8 +1,16 @@
 "use client";
 
 import type { ChangeEvent } from "react";
-import { validateCriticalFields } from "@/features/alerts/domain/validation";
-import type { AlertField, OptionSide, ParsedTradeAlert } from "@/features/alerts/domain/types";
+import {
+  isValidAlertExpiration,
+  validateCriticalFields,
+} from "@/features/alerts/domain/validation";
+import type {
+  AlertField,
+  OptionSide,
+  ParseIssueCode,
+  ParsedTradeAlert,
+} from "@/features/alerts/domain/types";
 
 export interface ParsedAlertEditorProps {
   alert: ParsedTradeAlert;
@@ -24,11 +32,24 @@ const toOptionalNumber = (value: string): number | null => {
   return Number.isFinite(number) && number > 0 ? number : null;
 };
 
-const fieldError = (field: AlertField): string => `${fieldLabels[field]} is required.`;
+const fieldError = (field: AlertField, code: ParseIssueCode): string => {
+  if (field === "expiration" && code === "invalid") {
+    return "Expiration must use a valid MM/DD date.";
+  }
+
+  return `${fieldLabels[field]} is required.`;
+};
 
 export const ParsedAlertEditor = ({ alert, onChange }: ParsedAlertEditorProps) => {
   const validationIssues = validateCriticalFields(alert);
   const invalidFields = new Set(validationIssues.map((issue) => issue.field));
+  const issueCodes = new Map(validationIssues.map((issue) => [issue.field, issue.code]));
+  const hasInvalidExpiration = !isValidAlertExpiration(alert.expiration);
+
+  if (hasInvalidExpiration && alert.expiration !== null) {
+    invalidFields.add("expiration");
+    issueCodes.set("expiration", "invalid");
+  }
 
   const update = (field: keyof ParsedTradeAlert, value: ParsedTradeAlert[keyof ParsedTradeAlert]) => {
     const next = { ...alert, [field]: value } as ParsedTradeAlert;
@@ -56,7 +77,9 @@ export const ParsedAlertEditor = ({ alert, onChange }: ParsedAlertEditorProps) =
           value={alert.symbol ?? ""}
           onChange={updateText("symbol")}
         />
-        {invalidFields.has("symbol") ? <p id="alert-symbol-error">{fieldError("symbol")}</p> : null}
+        {invalidFields.has("symbol") ? (
+          <p id="alert-symbol-error">{fieldError("symbol", issueCodes.get("symbol") ?? "required")}</p>
+        ) : null}
       </div>
       <div>
         <label htmlFor="alert-side">Call or put</label>
@@ -72,7 +95,9 @@ export const ParsedAlertEditor = ({ alert, onChange }: ParsedAlertEditorProps) =
           <option value="call">Call</option>
           <option value="put">Put</option>
         </select>
-        {invalidFields.has("side") ? <p id="alert-side-error">{fieldError("side")}</p> : null}
+        {invalidFields.has("side") ? (
+          <p id="alert-side-error">{fieldError("side", issueCodes.get("side") ?? "required")}</p>
+        ) : null}
       </div>
       <div>
         <label htmlFor="alert-strike">Strike</label>
@@ -87,7 +112,9 @@ export const ParsedAlertEditor = ({ alert, onChange }: ParsedAlertEditorProps) =
           value={alert.strike ?? ""}
           onChange={(event) => update("strike", toOptionalNumber(event.target.value))}
         />
-        {invalidFields.has("strike") ? <p id="alert-strike-error">{fieldError("strike")}</p> : null}
+        {invalidFields.has("strike") ? (
+          <p id="alert-strike-error">{fieldError("strike", issueCodes.get("strike") ?? "required")}</p>
+        ) : null}
       </div>
       <div>
         <label htmlFor="alert-expiration">Expiration</label>
@@ -101,7 +128,9 @@ export const ParsedAlertEditor = ({ alert, onChange }: ParsedAlertEditorProps) =
           onChange={updateText("expiration")}
         />
         {invalidFields.has("expiration") ? (
-          <p id="alert-expiration-error">{fieldError("expiration")}</p>
+          <p id="alert-expiration-error">
+            {fieldError("expiration", issueCodes.get("expiration") ?? "required")}
+          </p>
         ) : null}
       </div>
       <div>

@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { parseTradeAlert } from "@/features/alerts/domain/parser";
-import { validateCriticalFields } from "@/features/alerts/domain/validation";
+import {
+  isValidAlertExpiration,
+  validateCriticalFields,
+} from "@/features/alerts/domain/validation";
 
 describe("validateCriticalFields", () => {
   it("returns field-specific issues for each missing critical option field", () => {
@@ -44,5 +47,14 @@ describe("validateCriticalFields", () => {
       { field: "strike", code: "required" },
       { field: "expiration", code: "required" },
     ]);
+  });
+});
+
+describe("expiration validation", () => {
+  it("rejects malformed corrected expiration dates while preserving parser-compatible MM/DD dates", () => {
+    expect(isValidAlertExpiration("2/29")).toBe(true);
+    expect(isValidAlertExpiration("8/14")).toBe(true);
+    expect(isValidAlertExpiration("14/99")).toBe(false);
+    expect(isValidAlertExpiration("8-14")).toBe(false);
   });
 });

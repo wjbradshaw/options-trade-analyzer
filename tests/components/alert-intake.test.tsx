@@ -125,6 +125,39 @@ describe("AlertPasteForm", () => {
     ]);
   });
 
+  it("keeps a newly created source selected when the initial source list resolves later", async () => {
+    const user = userEvent.setup();
+    let resolveList!: (result: Result<TraderSource[], RepositoryError>) => void;
+    const createdSource: TraderSource = {
+      ...source,
+      id: "source-2",
+      name: "Late-created private room",
+    };
+    const repository: TraderRepository = {
+      listTraderSources: () =>
+        new Promise<Result<TraderSource[], RepositoryError>>((resolve) => {
+          resolveList = resolve;
+        }),
+      createTraderSource: async () => ok(createdSource),
+    };
+    renderForm(repository);
+
+    await user.type(screen.getByLabelText(/new trader source/i), createdSource.name);
+    await user.click(screen.getByRole("button", { name: /add trader source/i }));
+    expect(screen.getByRole("combobox", { name: "Trader source" })).toHaveValue(
+      createdSource.id,
+    );
+
+    resolveList(ok([]));
+
+    await waitFor(() =>
+      expect(screen.getByRole("combobox", { name: "Trader source" })).toHaveValue(
+        createdSource.id,
+      ),
+    );
+    expect(screen.getByRole("option", { name: createdSource.name })).toBeVisible();
+  });
+
   it("keeps analysis disabled and names missing critical fields", async () => {
     const user = userEvent.setup();
     renderForm();
@@ -135,6 +168,23 @@ describe("AlertPasteForm", () => {
     expect(screen.getByRole("button", { name: /analyze entry/i })).toBeDisabled();
     expect(screen.getByText(/strike is required/i)).toBeVisible();
     expect(screen.getByText(/call or put is required/i)).toBeVisible();
+  });
+
+  it("keeps analysis disabled for a malformed corrected expiration", async () => {
+    const user = userEvent.setup();
+    renderForm();
+
+    await user.type(screen.getByLabelText(/paste trade alert/i), "NBIS 8/14 220c @2.98");
+    await user.click(screen.getByRole("button", { name: /parse alert/i }));
+    await user.clear(screen.getByLabelText(/expiration/i));
+    await user.type(screen.getByLabelText(/expiration/i), "14/99");
+    await user.selectOptions(
+      screen.getByRole("combobox", { name: "Trader source" }),
+      source.id,
+    );
+
+    expect(screen.getByRole("button", { name: /analyze entry/i })).toBeDisabled();
+    expect(screen.getByText("Expiration must use a valid MM/DD date.")).toBeVisible();
   });
 
   it("shows trader repository errors visibly", async () => {

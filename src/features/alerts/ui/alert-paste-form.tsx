@@ -3,7 +3,10 @@
 import { useState } from "react";
 import { parseTradeAlert } from "@/features/alerts/domain/parser";
 import type { ParsedTradeAlert } from "@/features/alerts/domain/types";
-import { validateCriticalFields } from "@/features/alerts/domain/validation";
+import {
+  isValidAlertExpiration,
+  validateCriticalFields,
+} from "@/features/alerts/domain/validation";
 import { ParsedAlertEditor } from "@/features/alerts/ui/parsed-alert-editor";
 import { TraderSourceField } from "@/features/traders/ui/trader-source-field";
 import type { TraderRepository, TraderSource } from "@/features/traders/server/trader-repository";
@@ -31,13 +34,21 @@ export const AlertPasteForm = ({
   };
 
   const canAnalyze =
-    alert !== null && traderSource !== null && validateCriticalFields(alert).length === 0;
+    alert !== null &&
+    traderSource !== null &&
+    validateCriticalFields(alert).length === 0 &&
+    isValidAlertExpiration(alert.expiration);
 
   return (
     <form
       onSubmit={(event) => {
         event.preventDefault();
-        if (alert !== null && traderSource !== null && validateCriticalFields(alert).length === 0) {
+        if (
+          alert !== null &&
+          traderSource !== null &&
+          validateCriticalFields(alert).length === 0 &&
+          isValidAlertExpiration(alert.expiration)
+        ) {
           onAnalyze(alert, traderSource);
         }
       }}

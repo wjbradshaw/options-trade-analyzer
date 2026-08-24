@@ -33,7 +33,10 @@ export const TraderSourceField = ({
         return;
       }
 
-      setSources(result.value);
+      setSources((current) => {
+        const sourceIds = new Set(current.map((source) => source.id));
+        return [...current, ...result.value.filter((source) => !sourceIds.has(source.id))];
+      });
     };
 
     void loadSources();
