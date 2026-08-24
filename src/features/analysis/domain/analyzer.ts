@@ -1,10 +1,12 @@
 import { validateCriticalFields } from "@/features/alerts/domain/validation";
 import type { ParseIssue, ParsedTradeAlert } from "@/features/alerts/domain/types";
 import type { RiskAssessment } from "@/features/profile/domain/risk";
-import type {
-  FreshnessEvaluation,
-  MarketSnapshot,
-  RequiredSnapshotPrice,
+import {
+  evaluateFreshness,
+  MarketSnapshotSchema,
+  type FreshnessEvaluation,
+  type MarketSnapshot,
+  type RequiredSnapshotPrice,
 } from "@/features/market/domain/snapshot";
 import {
   factorWeights,
@@ -40,7 +42,9 @@ export interface AnalyzeEntryInput {
 
 export type EntryAnalysisBlockedCode =
   | "incomplete_contract"
-  | "freshness_blocked";
+  | "freshness_blocked"
+  | "invalid_dte"
+  | "invalid_market_snapshot";
 
 export class EntryAnalysisBlockedError extends Error {
   readonly code: EntryAnalysisBlockedCode;
@@ -57,7 +61,11 @@ export class EntryAnalysisBlockedError extends Error {
     super(
       code === "incomplete_contract"
         ? "A complete option contract is required before scoring."
-        : "A fresh short-dated market snapshot is required before scoring.",
+        : code === "invalid_dte"
+          ? "DTE must be a finite non-negative whole number."
+          : code === "invalid_market_snapshot"
+            ? "The market snapshot is invalid."
+            : "A fresh short-dated market snapshot is required before scoring.",
     );
     this.name = "EntryAnalysisBlockedError";
     this.code = code;
@@ -77,6 +85,9 @@ const makeFactor = (
   weight: factorWeights[category],
   ...values,
 });
+
+const isNonBlankString = (value: unknown): value is string =>
+  typeof value === "string" && value.trim().length > 0;
 
 const contextualFactor = (
   category:
@@ -100,6 +111,31 @@ const contextualFactor = (
     });
   }
 
+  if (
+    evidence.verified &&
+    (!Number.isFinite(evidence.support) ||
+      evidence.support < 0 ||
+      evidence.support > 1)
+  ) {
+    throw new RangeError("Verified evidence support must be between zero and one");
+  }
+
+  const validMetadata =
+    isNonBlankString(evidence.summary) &&
+    isNonBlankString(evidence.source) &&
+    MarketSnapshotSchema.shape.confirmedAt.safeParse(evidence.capturedAt).success;
+
+  if (!validMetadata) {
+    return makeFactor(category, {
+      status: "unverified",
+      earnedPoints: 0,
+      availablePoints: 0,
+      summary: "Contextual evidence could not be verified.",
+      source: null,
+      capturedAt: null,
+    });
+  }
+
   if (!evidence.verified) {
     return makeFactor(category, {
       status: "unverified",
@@ -109,10 +145,6 @@ const contextualFactor = (
       source: evidence.source,
       capturedAt: evidence.capturedAt,
     });
-  }
-
-  if (!Number.isFinite(evidence.support) || evidence.support < 0 || evidence.support > 1) {
-    throw new RangeError("Verified evidence support must be between zero and one");
   }
 
   return makeFactor(category, {
@@ -202,10 +234,11 @@ const riskFactor = (riskAssessment: RiskAssessment): AnalysisFactor => {
 const requireScoringGates = ({
   alert,
   dte,
+  marketSnapshot,
   freshness,
 }: Pick<
   AnalyzeEntryInput,
-  "alert" | "dte" | "freshness"
+  "alert" | "dte" | "marketSnapshot" | "freshness"
 >): Exclude<FreshnessEvaluation, { status: "blocked" }> => {
   const issues = validateCriticalFields(alert);
 
@@ -213,7 +246,28 @@ const requireScoringGates = ({
     throw new EntryAnalysisBlockedError("incomplete_contract", { issues });
   }
 
+  if (!Number.isFinite(dte) || dte < 0 || !Number.isInteger(dte)) {
+    throw new EntryAnalysisBlockedError("invalid_dte");
+  }
+
   const shortDated = dte === 0 || dte === 1;
+
+  if (shortDated) {
+    const snapshotFreshness = evaluateFreshness(
+      { ...marketSnapshot, dte },
+      new Date(marketSnapshot.confirmedAt),
+    );
+
+    if (snapshotFreshness.status === "blocked") {
+      throw new EntryAnalysisBlockedError("freshness_blocked", {
+        missing: snapshotFreshness.missing,
+      });
+    }
+  }
+
+  if (!MarketSnapshotSchema.safeParse(marketSnapshot).success) {
+    throw new EntryAnalysisBlockedError("invalid_market_snapshot");
+  }
 
   if (freshness.status === "blocked") {
     throw new EntryAnalysisBlockedError("freshness_blocked", {

@@ -63,6 +63,16 @@ const findFactor = (
   return factor;
 };
 
+const captureBlockedError = (input: AnalyzeEntryInput): unknown => {
+  try {
+    analyzeEntry(input);
+  } catch (error) {
+    return error;
+  }
+
+  throw new Error("Expected analysis to be blocked");
+};
+
 describe("analyzeEntry", () => {
   it("returns all fixed evidence categories with weights totaling 100 and transparent metadata (mutation: omit a category or its evidence metadata)", () => {
     const analysis = analyzeEntry(completeSupportiveInput());
@@ -241,17 +251,117 @@ describe("analyzeEntry", () => {
     });
   });
 
+  it("derives missing zero- and one-DTE manual prices from the snapshot rather than trusting a forged fresh status (mutation: rely on the supplied freshness status alone)", () => {
+    const invalidPrices: Array<{
+      field: "optionPremium" | "underlyingPrice";
+      value: number | null;
+      missing: "optionPremium" | "underlyingPrice";
+    }> = [
+      { field: "optionPremium", value: null, missing: "optionPremium" },
+      { field: "optionPremium", value: 0, missing: "optionPremium" },
+      { field: "optionPremium", value: -2.98, missing: "optionPremium" },
+      { field: "optionPremium", value: Number.NaN, missing: "optionPremium" },
+      {
+        field: "optionPremium",
+        value: Number.POSITIVE_INFINITY,
+        missing: "optionPremium",
+      },
+      { field: "underlyingPrice", value: null, missing: "underlyingPrice" },
+      { field: "underlyingPrice", value: 0, missing: "underlyingPrice" },
+      { field: "underlyingPrice", value: -220, missing: "underlyingPrice" },
+      {
+        field: "underlyingPrice",
+        value: Number.NaN,
+        missing: "underlyingPrice",
+      },
+      {
+        field: "underlyingPrice",
+        value: Number.POSITIVE_INFINITY,
+        missing: "underlyingPrice",
+      },
+    ];
+
+    for (const dte of [0, 1]) {
+      for (const { field, value, missing } of invalidPrices) {
+        const input = completeSupportiveInput();
+        input.dte = dte;
+        input.marketSnapshot = { ...input.marketSnapshot, [field]: value };
+        input.freshness = { status: "fresh" };
+
+        const blockedError = captureBlockedError(input);
+
+        expect(blockedError).toBeInstanceOf(EntryAnalysisBlockedError);
+        expect(blockedError).toMatchObject({
+          code: "freshness_blocked",
+          missing: [missing],
+        });
+      }
+    }
+  });
+
+  it("allows nullable market prices for a longer-dated contract (mutation: apply the short-dated price gate to every DTE)", () => {
+    const input = completeSupportiveInput();
+    input.marketSnapshot = {
+      ...input.marketSnapshot,
+      optionPremium: null,
+      underlyingPrice: null,
+    };
+
+    expect(analyzeEntry(input).verdict).toBe("Consider");
+  });
+
+  it("treats blank or malformed verified contextual evidence as unverified and waits (mutation: award points without validating evidence provenance)", () => {
+    const malformedEvidence = [
+      { summary: "", source: "Manual review", capturedAt: confirmedAt },
+      { summary: "Verified supporting evidence.", source: "", capturedAt: confirmedAt },
+      {
+        summary: "Verified supporting evidence.",
+        source: "Manual review",
+        capturedAt: "not an ISO timestamp",
+      },
+    ];
+
+    for (const catalyst of malformedEvidence) {
+      const input = completeSupportiveInput();
+      input.catalyst = { verified: true, support: 1, ...catalyst };
+
+      const analysis = analyzeEntry(input);
+
+      expect(analysis).toMatchObject({
+        verdict: "Wait",
+        score: 100,
+        evidenceCoverage: 90,
+      });
+      expect(findFactor(analysis, "catalyst")).toEqual({
+        category: "catalyst",
+        weight: 10,
+        status: "unverified",
+        earnedPoints: 0,
+        availablePoints: 0,
+        summary: "Contextual evidence could not be verified.",
+        source: null,
+        capturedAt: null,
+      });
+    }
+  });
+
+  it("blocks non-finite, negative, and fractional DTE before returning a score or verdict (mutation: allow invalid DTE past the short-dated guard)", () => {
+    for (const dte of [Number.NaN, Number.POSITIVE_INFINITY, -1, 1.5]) {
+      const input = completeSupportiveInput();
+      input.dte = dte;
+
+      const blockedError = captureBlockedError(input);
+
+      expect(blockedError).toBeInstanceOf(EntryAnalysisBlockedError);
+      expect(blockedError).toMatchObject({ code: "invalid_dte" });
+    }
+  });
+
   it("blocks incomplete contracts before returning a setup score or verdict (mutation: relabel incomplete contract as Wait)", () => {
     const input = completeSupportiveInput();
     input.alert = { ...input.alert, symbol: null };
 
-    let blockedError: unknown;
-
-    try {
-      analyzeEntry(input);
-    } catch (error) {
-      blockedError = error;
-    }
+    const blockedError = captureBlockedError(input);
 
     expect(blockedError).toBeInstanceOf(EntryAnalysisBlockedError);
     expect(blockedError).toMatchObject({
@@ -269,13 +379,7 @@ describe("analyzeEntry", () => {
     };
     input.freshness = { status: "blocked", missing: ["optionPremium"] };
 
-    let blockedError: unknown;
-
-    try {
-      analyzeEntry(input);
-    } catch (error) {
-      blockedError = error;
-    }
+    const blockedError = captureBlockedError(input);
 
     expect(blockedError).toBeInstanceOf(EntryAnalysisBlockedError);
     expect(blockedError).toMatchObject({
