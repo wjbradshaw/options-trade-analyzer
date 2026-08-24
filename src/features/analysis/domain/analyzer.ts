@@ -111,15 +111,6 @@ const contextualFactor = (
     });
   }
 
-  if (
-    evidence.verified &&
-    (!Number.isFinite(evidence.support) ||
-      evidence.support < 0 ||
-      evidence.support > 1)
-  ) {
-    throw new RangeError("Verified evidence support must be between zero and one");
-  }
-
   const validMetadata =
     isNonBlankString(evidence.summary) &&
     isNonBlankString(evidence.source) &&
@@ -134,6 +125,15 @@ const contextualFactor = (
       source: null,
       capturedAt: null,
     });
+  }
+
+  if (
+    evidence.verified &&
+    (!Number.isFinite(evidence.support) ||
+      evidence.support < 0 ||
+      evidence.support > 1)
+  ) {
+    throw new RangeError("Verified evidence support must be between zero and one");
   }
 
   if (!evidence.verified) {

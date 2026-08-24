@@ -345,6 +345,50 @@ describe("analyzeEntry", () => {
     }
   });
 
+  it("treats malformed provenance with invalid verified support as safe unverified evidence (mutation: validate support before provenance)", () => {
+    const input = completeSupportiveInput();
+    input.catalyst = {
+      verified: true,
+      support: Number.POSITIVE_INFINITY,
+      summary: "",
+      source: "Manual review",
+      capturedAt: confirmedAt,
+    };
+
+    const analysis = analyzeEntry(input);
+
+    expect(analysis).toMatchObject({
+      verdict: "Wait",
+      score: 100,
+      evidenceCoverage: 90,
+    });
+    expect(findFactor(analysis, "catalyst")).toEqual({
+      category: "catalyst",
+      weight: 10,
+      status: "unverified",
+      earnedPoints: 0,
+      availablePoints: 0,
+      summary: "Contextual evidence could not be verified.",
+      source: null,
+      capturedAt: null,
+    });
+  });
+
+  it("rejects invalid verified support when provenance is valid (mutation: remove support range validation)", () => {
+    const input = completeSupportiveInput();
+    input.catalyst = {
+      verified: true,
+      support: 1.01,
+      summary: "Verified supporting evidence.",
+      source: "Manual review",
+      capturedAt: confirmedAt,
+    };
+
+    expect(() => analyzeEntry(input)).toThrow(
+      "Verified evidence support must be between zero and one",
+    );
+  });
+
   it("blocks non-finite, negative, and fractional DTE before returning a score or verdict (mutation: allow invalid DTE past the short-dated guard)", () => {
     for (const dte of [Number.NaN, Number.POSITIVE_INFINITY, -1, 1.5]) {
       const input = completeSupportiveInput();
