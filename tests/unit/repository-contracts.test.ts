@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ok, type Result } from "@/lib/result";
+import { err, ok, type Result } from "@/lib/result";
 import type { ParsedTradeAlert } from "@/features/alerts/domain/types";
 import {
   mapProfileRow,
@@ -47,7 +47,11 @@ class InMemoryProfileRepository implements ProfileRepository {
   private profile: Profile | null = null;
 
   async getProfile(): Promise<Result<Profile, ProfileRepositoryError>> {
-    return ok(clone(this.profile!));
+    if (!this.profile) {
+      return err({ code: "not_found", message: "Profile was not found" });
+    }
+
+    return ok(clone(this.profile));
   }
 
   async upsertProfile(
@@ -93,6 +97,7 @@ class InMemoryAlertRepository implements AlertRepository {
       traderSourceId: input.traderSourceId,
       ...clone(input.alert),
       correctedFields: clone(input.correctedFields),
+      contractConfirmed: input.contractConfirmed,
       createdAt,
       updatedAt,
     };
@@ -101,7 +106,12 @@ class InMemoryAlertRepository implements AlertRepository {
   }
 
   async getAlert(id: string): Promise<Result<SavedAlert, AlertRepositoryError>> {
-    return ok(clone(this.alerts.get(id)!));
+    const alert = this.alerts.get(id);
+    if (!alert) {
+      return err({ code: "not_found", message: "Trade alert was not found" });
+    }
+
+    return ok(clone(alert));
   }
 }
 
@@ -130,6 +140,24 @@ class InMemoryDecisionRepository implements DecisionRepository {
 }
 
 describe("repository contracts", () => {
+  it("returns the production not_found shape for a missing profile", async () => {
+    const repository = new InMemoryProfileRepository();
+
+    expect(await repository.getProfile()).toEqual({
+      ok: false,
+      error: { code: "not_found", message: "Profile was not found" },
+    });
+  });
+
+  it("returns the production not_found shape for a missing alert", async () => {
+    const repository = new InMemoryAlertRepository();
+
+    expect(await repository.getAlert("missing-alert")).toEqual({
+      ok: false,
+      error: { code: "not_found", message: "Trade alert was not found" },
+    });
+  });
+
   it("round-trips the user-owned options budget", async () => {
     const repository = new InMemoryProfileRepository();
 
@@ -187,6 +215,7 @@ describe("repository contracts", () => {
       traderSourceId: "source-1",
       alert,
       correctedFields,
+      contractConfirmed: true,
     });
     expect(saved.ok).toBe(true);
 
@@ -197,6 +226,7 @@ describe("repository contracts", () => {
         traderSourceId: "source-1",
         ...alert,
         correctedFields,
+        contractConfirmed: true,
         createdAt,
         updatedAt,
       }),
@@ -284,6 +314,7 @@ describe("snake_case row mappers", () => {
         trader_source_id: "source-1",
         raw_text: " AAPL 200c ",
         corrected_fields: { strike: 201 },
+        contract_confirmed: true,
         symbol: "AAPL",
         option_side: "call",
         strike: 200,
@@ -298,6 +329,7 @@ describe("snake_case row mappers", () => {
     ).toMatchObject({
       rawText: " AAPL 200c ",
       correctedFields: { strike: 201 },
+      contractConfirmed: true,
       side: "call",
       submittedAt: "2026-08-24T13:45:12.000Z",
       createdAt,
@@ -312,6 +344,7 @@ describe("snake_case row mappers", () => {
         user_id: "user-1",
         trade_alert_id: "alert-1",
         market_snapshot_id: null,
+        alert_contract_confirmed: true,
         verdict: "Consider",
         evidence_score: 7.25,
         analysis_factors: { trend: { points: 2 } },

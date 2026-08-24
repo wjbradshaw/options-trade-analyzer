@@ -64,6 +64,7 @@ export interface Database {
           strike: number | null;
           expiration: string | null;
           alerted_premium: number | null;
+          contract_confirmed: boolean;
           submitted_at: string;
           tags: Json;
           parse_issues: Json;
@@ -79,6 +80,7 @@ export interface Database {
           strike?: number | null;
           expiration?: string | null;
           alerted_premium?: number | null;
+          contract_confirmed?: boolean;
           submitted_at: string;
           tags?: Json;
           parse_issues?: Json;
@@ -106,6 +108,7 @@ export interface Database {
           user_id: string;
           trade_alert_id: string;
           market_snapshot_id: string | null;
+          alert_contract_confirmed: boolean;
           verdict: string;
           evidence_score: number;
           analysis_factors: Json;
@@ -117,6 +120,7 @@ export interface Database {
           user_id: string;
           trade_alert_id: string;
           market_snapshot_id?: string | null;
+          alert_contract_confirmed?: boolean;
           verdict: string;
           evidence_score: number;
           analysis_factors: Json;
@@ -154,6 +158,7 @@ export interface Database {
           user_id: string;
           trade_alert_id: string;
           source_analysis_id: string;
+          source_analysis_verdict: "Wait";
           latest_analysis_id: string;
           unresolved_confirmation_conditions: Json;
           status: string;
@@ -163,6 +168,7 @@ export interface Database {
           user_id: string;
           trade_alert_id: string;
           source_analysis_id: string;
+          source_analysis_verdict?: "Wait";
           latest_analysis_id: string;
           unresolved_confirmation_conditions?: Json;
           status?: string;

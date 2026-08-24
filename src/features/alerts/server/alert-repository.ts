@@ -24,6 +24,7 @@ export interface SaveAlertInput {
   traderSourceId: string;
   alert: ParsedTradeAlert;
   correctedFields: CorrectedAlertFields;
+  contractConfirmed: boolean;
 }
 
 export interface SavedAlert extends ParsedTradeAlert {
@@ -31,6 +32,7 @@ export interface SavedAlert extends ParsedTradeAlert {
   userId: string;
   traderSourceId: string;
   correctedFields: CorrectedAlertFields;
+  contractConfirmed: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -46,6 +48,7 @@ export const mapAlertRow = (row: TableRow<"trade_alerts">): SavedAlert => ({
   traderSourceId: row.trader_source_id,
   rawText: row.raw_text,
   correctedFields: row.corrected_fields as CorrectedAlertFields,
+  contractConfirmed: row.contract_confirmed,
   symbol: row.symbol,
   side: row.option_side as OptionSide | null,
   strike: row.strike,
@@ -70,6 +73,7 @@ export class SupabaseAlertRepository implements AlertRepository {
         trader_source_id: input.traderSourceId,
         raw_text: alert.rawText,
         corrected_fields: input.correctedFields as Json,
+        contract_confirmed: input.contractConfirmed,
         symbol: alert.symbol,
         option_side: alert.side,
         strike: alert.strike,

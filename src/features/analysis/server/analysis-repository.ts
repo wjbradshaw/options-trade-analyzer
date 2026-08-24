@@ -57,6 +57,7 @@ export class SupabaseAnalysisRepository implements AnalysisRepository {
         user_id: input.userId,
         trade_alert_id: input.tradeAlertId,
         market_snapshot_id: input.marketSnapshotId,
+        alert_contract_confirmed: true,
         verdict: input.verdict,
         evidence_score: input.evidenceScore,
         analysis_factors: input.factors,

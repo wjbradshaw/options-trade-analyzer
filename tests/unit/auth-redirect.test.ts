@@ -1,12 +1,27 @@
 import { describe, expect, it } from "vitest";
-import { safeRedirectPath } from "@/lib/auth/redirect";
+import { safeRedirectUrl } from "@/lib/auth/redirect";
 
-describe("safeRedirectPath", () => {
+describe("safeRedirectUrl", () => {
+  const trustedOrigin = "https://trusted.example";
+
   it("rejects a protocol-relative callback target", () => {
-    expect(safeRedirectPath("//attacker.example")).toBe("/");
+    expect(safeRedirectUrl("//attacker.example", trustedOrigin).href).toBe(
+      "https://trusted.example/",
+    );
   });
 
-  it("keeps an application-relative callback target", () => {
-    expect(safeRedirectPath("/dashboard/candidates")).toBe("/dashboard/candidates");
+  it("rejects a backslash-normalized external callback target", () => {
+    expect(safeRedirectUrl("/\\attacker.example", trustedOrigin).href).toBe(
+      "https://trusted.example/",
+    );
+  });
+
+  it("keeps an in-app callback target with its query and hash", () => {
+    expect(
+      safeRedirectUrl("/dashboard/candidates?status=watching#candidate-1", trustedOrigin)
+        .href,
+    ).toBe(
+      "https://trusted.example/dashboard/candidates?status=watching#candidate-1",
+    );
   });
 });
