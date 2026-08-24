@@ -66,13 +66,17 @@ Use direct project executables, not the managed `pnpm` wrapper: in this desktop 
 
 ## Current blocker — resolve before Task 5
 
-Task 4’s required live migration/RLS check has not run. The first Supabase CLI attempt was sandbox-blocked from creating `C:\Users\rjsc\.supabase`; an elevated retry reached startup and failed with:
+Task 4’s required live migration/RLS check has not run. The first Supabase CLI attempt was sandbox-blocked from creating `C:\Users\rjsc\.supabase`; an elevated retry initially found no Docker installation.
+
+Docker Desktop 29.7.2 was installed on 2026-08-24. Its CLI is at `C:\Users\rjsc\AppData\Local\Programs\DockerDesktop\resources\bin\docker.exe`, but the Linux engine remains stopped. Fresh diagnostics show that Windows Subsystem for Linux is not installed, and Docker returns HTTP 500 from the `desktop-linux` named pipe.
+
+Install WSL as an administrator, restart Windows if requested, and reopen Docker Desktop until `docker version` reports both Client and Server. The expected Windows command is:
 
 ```text
-LegacyDockerLifecycleInspectError: docker: command not found (podman also not found)
+wsl.exe --install --no-distribution
 ```
 
-Docker Desktop or Podman must be installed, running, and available on `PATH`. Then run:
+After Docker’s Linux engine is healthy, ensure its `resources\bin` directory is on `PATH` for the shell and run:
 
 ```powershell
 node_modules/.bin/supabase.cmd start
