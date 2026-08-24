@@ -21,7 +21,7 @@ The approved specification resolves any conflict with the plan or this handoff.
 
 - Workspace: `C:\Users\rjsc\Documents\Codex\2026-08-17\options-trade-analyzer`
 - Branch: `phase-1-entry-analyzer`
-- Current implementation head: `0201d46 fix: enforce phase one persistence integrity`
+- Current implementation head: `0dea911 test: strengthen persistence relationship coverage`
 - No remote push, merge, or deployment has been performed.
 
 ## Phase One constraints that must remain intact
@@ -42,15 +42,17 @@ The approved specification resolves any conflict with the plan or this handoff.
 | 1. Foundation and quality gates | Reviewed complete | `4c5cf47` through `2b45a23` |
 | 2. Alert parser and critical-field validation | Reviewed complete | `277ca07`, `d3ff9f0` |
 | 3. Calculations and risk rules | Reviewed complete | `7a26215` |
-| 4. Supabase schema, auth, repositories | Code/review complete; live verification blocked | `7971005`, `0201d46` |
+| 4. Supabase schema, auth, repositories | Reviewed complete; live verification passed | `7971005`, `0201d46`, `defec07`, `0dea911` |
 
 Task 4 includes a passwordless Supabase login/callback, typed client/server repositories, a Phase One migration with RLS and tenant-safe foreign keys, confirmed-contract enforcement before persisted analyses, and `Wait` candidate integrity. Its review/fix loop closed with no open code findings.
 
 ## Fresh verification evidence
 
-At Task 4 head (`0201d46`), the controller ran successfully:
+At Task 4 head (`0dea911`), the controller ran successfully:
 
 ```powershell
+node_modules/.bin/supabase.cmd db reset          # migration reapplied from scratch
+node_modules/.bin/supabase.cmd test db           # 1 file, 12 pgTAP assertions passed
 node_modules/.bin/vitest.cmd run                 # 9 files, 47 tests passed
 node_modules/.bin/eslint.cmd .                   # exit 0
 node_modules/.bin/tsc.cmd --noEmit               # exit 0
@@ -60,32 +62,25 @@ node_modules/.bin/next.cmd build                 # exit 0
 git diff --check 7a26215..HEAD                   # exit 0
 ```
 
+The live tests verify exact authenticated CRUD privileges on all seven user tables, no anonymous table privileges, all 28 ownership policies with RLS enabled, representative cross-tenant denial, confirmed-alert enforcement, and valid/invalid `Wait` candidate relationships. Independent review was clean after two live-verification fix rounds.
+
 The build emits the known Next 16 warning that `middleware.ts` is deprecated in favor of `proxy.ts`. Keep `middleware.ts` for now because the approved Task 4 plan explicitly requires it; do not migrate without a plan update.
 
 Use direct project executables, not the managed `pnpm` wrapper: in this desktop environment `pnpm` aborts before running project scripts with `ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY`.
 
-## Current blocker — resolve before Task 5
+## Local Supabase environment
 
-Task 4’s required live migration/RLS check has not run. The first Supabase CLI attempt was sandbox-blocked from creating `C:\Users\rjsc\.supabase`; an elevated retry initially found no Docker installation.
-
-Docker Desktop 29.7.2 was installed on 2026-08-24. Its CLI is at `C:\Users\rjsc\AppData\Local\Programs\DockerDesktop\resources\bin\docker.exe`, but the Linux engine remains stopped and Docker returns HTTP 500 from the `desktop-linux` named pipe.
-
-WSL was then installed successfully through an elevated Windows prompt. Fresh `wsl.exe --status` diagnostics now report that WSL2 cannot start because virtualization is not enabled. `Win32_Processor.VirtualizationFirmwareEnabled`, `VMMonitorModeExtensions`, and `SecondLevelAddressTranslationExtensions` all report `False` in the current boot.
-
-Restart Windows first to finish applying the WSL/Virtual Machine Platform change. If Windows still reports virtualization disabled afterward, enable Intel Virtualization Technology (VT-x) in UEFI/BIOS, boot Windows, and reopen Docker Desktop until `docker version` reports both Client and Server.
-
-After Docker’s Linux engine is healthy, ensure its `resources\bin` directory is on `PATH` for the shell and run:
+The Docker/WSL blocker is resolved. Docker Desktop 29.7.2 and the local Supabase stack run successfully. If Docker is not already on the shell `PATH`, prepend:
 
 ```powershell
-node_modules/.bin/supabase.cmd start
-node_modules/.bin/supabase.cmd db reset
+$env:PATH = 'C:\Users\rjsc\AppData\Local\Programs\DockerDesktop\resources\bin;' + $env:PATH
 ```
 
-Verify the migration applies and that unauthenticated reads fail, while authenticated user A cannot read or cross-link user B’s records. Do not treat static migration tests as a substitute. Record the outcome in both this file and the SDD ledger before starting Task 5.
+Supabase CLI state under `supabase/.temp/` and `supabase/.branches/` is generated locally and excluded from both Git and ESLint.
 
 ## Next implementation step
 
-After resolving the live Supabase blocker, start **Task 5: Manual market snapshot and freshness policy** from the approved plan. Follow the existing workflow: test-first implementation, commit, independent task review, fix loop if needed, fresh verification, then update this handoff and the SDD ledger.
+Start **Task 5: Manual market snapshot and freshness policy** from the approved plan. Follow the existing workflow: test-first implementation, commit, independent task review, fix loop if needed, fresh verification, then update this handoff and the SDD ledger. Task 5 has not started.
 
 ## Known non-blocking follow-ups
 
