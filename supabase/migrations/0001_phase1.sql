@@ -283,3 +283,36 @@ for update to authenticated using ((select auth.uid()) = user_id)
 with check ((select auth.uid()) = user_id);
 create policy watch_candidates_delete_own on public.watch_candidates
 for delete to authenticated using ((select auth.uid()) = user_id);
+
+revoke select, insert, update, delete, truncate, references, trigger
+on table
+  public.profiles,
+  public.trader_sources,
+  public.trade_alerts,
+  public.market_snapshots,
+  public.entry_analyses,
+  public.trade_decisions,
+  public.watch_candidates
+from anon;
+
+revoke truncate, references, trigger
+on table
+  public.profiles,
+  public.trader_sources,
+  public.trade_alerts,
+  public.market_snapshots,
+  public.entry_analyses,
+  public.trade_decisions,
+  public.watch_candidates
+from authenticated;
+
+grant select, insert, update, delete
+on table
+  public.profiles,
+  public.trader_sources,
+  public.trade_alerts,
+  public.market_snapshots,
+  public.entry_analyses,
+  public.trade_decisions,
+  public.watch_candidates
+to authenticated;
