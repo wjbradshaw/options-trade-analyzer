@@ -37,7 +37,7 @@ const statusLabels: Record<AnalysisFactor["status"], string> = {
 const statusColors: Record<AnalysisFactor["status"], string> = {
   supported: "#2f9e44",
   limited: "#b7791f",
-  unverified: "#c92a2a",
+  unverified: "#ff7b72",
 };
 
 const formatUsd = (amount: number): string =>
@@ -87,7 +87,9 @@ export const HybridAnalysisBlock = ({
     premium: contract.optionPremium,
     quantity: contract.quantity ?? 1,
   });
-  const catalyst = analysis.factors.find((factor) => factor.category === "catalyst");
+  const catalyst = analysis.factors.find(
+    (factor) => factor.category === "catalyst",
+  );
   const supportingFactors = analysis.factors.filter(
     (factor) => factor.status === "supported",
   );
@@ -104,8 +106,12 @@ export const HybridAnalysisBlock = ({
         <p style={{ color: verdictColors[analysis.verdict], margin: 0 }}>
           <strong>{analysis.verdict}</strong>
         </p>
-        <h2 style={{ marginBlock: "0.25rem" }}>{analysis.score}% setup evidence strength</h2>
-        <p>Setup score measures evidence strength, not probability of profit.</p>
+        <h2 style={{ marginBlock: "0.25rem" }}>
+          {analysis.score}% setup evidence strength
+        </h2>
+        <p>
+          Setup score measures evidence strength, not probability of profit.
+        </p>
       </header>
 
       <dl
@@ -137,11 +143,16 @@ export const HybridAnalysisBlock = ({
         </div>
         <div>
           <dt>Catalyst</dt>
-          <dd style={{ margin: 0 }}>{catalyst?.summary ?? "No catalyst confirmed."}</dd>
+          <dd style={{ margin: 0 }}>
+            {catalyst?.summary ?? "No catalyst confirmed."}
+          </dd>
         </div>
       </dl>
 
-      <EvidenceGroup heading="Supporting evidence" factors={supportingFactors} />
+      <EvidenceGroup
+        heading="Supporting evidence"
+        factors={supportingFactors}
+      />
       <EvidenceGroup heading="Blocking evidence" factors={blockingFactors} />
       <EvidenceDetails factors={analysis.factors} />
     </section>

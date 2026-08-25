@@ -162,7 +162,7 @@ describe("HybridAnalysisBlock", () => {
       color: "#b7791f",
     });
     expect(within(blocking).getByText("Unverified")).toHaveStyle({
-      color: "#c92a2a",
+      color: "#ff7b72",
     });
   });
 

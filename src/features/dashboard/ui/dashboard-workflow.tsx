@@ -27,8 +27,14 @@ import type {
 import { PurchaseDecision } from "@/features/decisions/ui/purchase-decision";
 import { WatchCandidateCard } from "@/features/decisions/ui/watch-candidate-card";
 import { ManualSnapshotForm } from "@/features/market/ui/manual-snapshot-form";
-import type { Profile, ProfileRepository } from "@/features/profile/server/profile-repository";
-import type { TraderRepository, TraderSource } from "@/features/traders/server/trader-repository";
+import type {
+  Profile,
+  ProfileRepository,
+} from "@/features/profile/server/profile-repository";
+import type {
+  TraderRepository,
+  TraderSource,
+} from "@/features/traders/server/trader-repository";
 import { err, type Result } from "@/lib/result";
 import type { RepositoryError } from "@/lib/supabase/repository-error";
 import type {
@@ -71,6 +77,8 @@ export interface DashboardWorkflowProps {
 
 export interface SavedCandidateReviewProps {
   item: HydratedWatchCandidate;
+  decisionRepository: DecisionRepository;
+  watchCandidateRepository: WatchCandidateRepository;
   refreshAction(
     command: RefreshWaitCandidateCommand,
   ): Promise<Result<WatchCandidateRefresh, RepositoryError>>;
@@ -82,25 +90,37 @@ const compareEvidence = (
   after: EntryAnalysis,
 ): ChangedEvidence[] =>
   after.factors.flatMap((latest) => {
-    const previous = before.factors.find((factor) => factor.category === latest.category);
-    if (previous && previous.status === latest.status && previous.summary === latest.summary) {
+    const previous = before.factors.find(
+      (factor) => factor.category === latest.category,
+    );
+    if (
+      previous &&
+      previous.status === latest.status &&
+      previous.summary === latest.summary
+    ) {
       return [];
     }
-    return [{
-      category: latest.category,
-      before: previous
-        ? `${previous.status}: ${previous.summary}`
-        : "Not previously recorded",
-      after: `${latest.status}: ${latest.summary}`,
-    }];
+    return [
+      {
+        category: latest.category,
+        before: previous
+          ? `${previous.status}: ${previous.summary}`
+          : "Not previously recorded",
+        after: `${latest.status}: ${latest.summary}`,
+      },
+    ];
   });
 
 export const SavedCandidateReview = ({
   item,
+  decisionRepository,
+  watchCandidateRepository,
   refreshAction,
   now = () => new Date(),
 }: SavedCandidateReviewProps) => {
-  const [snapshot, setSnapshot] = useState<AnalyzeAlertCommand["marketSnapshot"] | null>(null);
+  const [snapshot, setSnapshot] = useState<
+    AnalyzeAlertCommand["marketSnapshot"] | null
+  >(null);
   const [quantity, setQuantity] = useState<1 | 2 | 3>(1);
   const dte = calculateDte({
     asOf: now().toISOString().slice(0, 10),
@@ -115,17 +135,26 @@ export const SavedCandidateReview = ({
           beforeAnalyzedAt: item.sourceAnalyzedAt,
           latestAnalysis: item.latestAnalysis,
           latestAnalyzedAt: item.latestAnalyzedAt,
-          changedEvidence: compareEvidence(item.sourceAnalysis, item.latestAnalysis),
+          changedEvidence: compareEvidence(
+            item.sourceAnalysis,
+            item.latestAnalysis,
+          ),
         };
+  const [latestRefresh, setLatestRefresh] =
+    useState<WatchCandidateRefresh | null>(initialRefresh ?? null);
 
   return (
     <section aria-label={`Refresh ${item.alert.symbol ?? "saved candidate"}`}>
       <h3>New manual snapshot</h3>
-      <label htmlFor={`refresh-quantity-${item.candidate.id}`}>Refresh quantity</label>
+      <label htmlFor={`refresh-quantity-${item.candidate.id}`}>
+        Refresh quantity
+      </label>
       <select
         id={`refresh-quantity-${item.candidate.id}`}
         value={quantity}
-        onChange={(event) => setQuantity(Number(event.target.value) as 1 | 2 | 3)}
+        onChange={(event) =>
+          setQuantity(Number(event.target.value) as 1 | 2 | 3)
+        }
       >
         <option value="1">1</option>
         <option value="2">2</option>
@@ -137,15 +166,21 @@ export const SavedCandidateReview = ({
         now={now}
         onConfirm={setSnapshot}
       />
-      {snapshot === null ? null : <p role="status">New snapshot confirmed. Select Refresh analysis.</p>}
+      {snapshot === null ? null : (
+        <p role="status">New snapshot confirmed. Select Refresh analysis.</p>
+      )}
       <WatchCandidateCard
         candidate={item.candidate}
         sourceAnalysis={item.sourceAnalysis}
         sourceAnalyzedAt={item.sourceAnalyzedAt}
         initialRefresh={initialRefresh}
+        onRefreshed={setLatestRefresh}
         onRefresh={async () =>
           snapshot === null
-            ? err({ code: "database", message: "Confirm a new manual snapshot before refresh." })
+            ? err({
+                code: "database",
+                message: "Confirm a new manual snapshot before refresh.",
+              })
             : refreshAction({
                 candidateId: item.candidate.id,
                 marketSnapshot: snapshot,
@@ -156,6 +191,27 @@ export const SavedCandidateReview = ({
               })
         }
       />
+      {latestRefresh === null ? null : (
+        <PurchaseDecision
+          analysis={latestRefresh.latestAnalysis}
+          analysisId={latestRefresh.candidate.latestAnalysisId}
+          sourceAnalyzedAt={latestRefresh.latestAnalyzedAt}
+          userId={latestRefresh.candidate.userId}
+          tradeAlertId={latestRefresh.candidate.tradeAlertId}
+          unresolvedConditions={
+            latestRefresh.candidate.unresolvedConfirmationConditions
+          }
+          decisionRepository={decisionRepository}
+          watchCandidateRepository={watchCandidateRepository}
+          onRefresh={async () =>
+            err({
+              code: "database",
+              message: "Confirm a new manual snapshot before another refresh.",
+            })
+          }
+          now={now}
+        />
+      )}
     </section>
   );
 };
@@ -186,12 +242,16 @@ export const DashboardWorkflow = ({
   now = () => new Date(),
 }: DashboardWorkflowProps) => {
   const [profile, setProfile] = useState(initialProfile);
-  const [pendingAlert, setPendingAlert] = useState<ParsedTradeAlert | null>(null);
+  const [pendingAlert, setPendingAlert] = useState<ParsedTradeAlert | null>(
+    null,
+  );
   const [traderSource, setTraderSource] = useState<TraderSource | null>(null);
   const [dte, setDte] = useState<number | null>(null);
   const [quantity, setQuantity] = useState<1 | 2 | 3>(1);
   const [plannedLoss, setPlannedLoss] = useState("");
-  const [completed, setCompleted] = useState<DashboardEntryAnalysis | null>(null);
+  const [completed, setCompleted] = useState<DashboardEntryAnalysis | null>(
+    null,
+  );
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
   const analysisInFlight = useRef(false);
@@ -253,12 +313,20 @@ export const DashboardWorkflow = ({
     setAnalysisError(null);
   };
 
-  const analyzeSnapshot = async (marketSnapshot: AnalyzeAlertCommand["marketSnapshot"]) => {
-    if (pendingAlert === null || traderSource === null || analysisInFlight.current) return;
+  const analyzeSnapshot = async (
+    marketSnapshot: AnalyzeAlertCommand["marketSnapshot"],
+  ) => {
+    if (
+      pendingAlert === null ||
+      traderSource === null ||
+      analysisInFlight.current
+    )
+      return;
     analysisInFlight.current = true;
     setAnalyzing(true);
     setAnalysisError(null);
-    const parsedPlannedLoss = plannedLoss.trim() === "" ? undefined : Number(plannedLoss);
+    const parsedPlannedLoss =
+      plannedLoss.trim() === "" ? undefined : Number(plannedLoss);
     try {
       const result = await analyzeAction({
         alert: pendingAlert,
@@ -284,13 +352,27 @@ export const DashboardWorkflow = ({
     ...initialAttention,
     ...(analysisError === null
       ? []
-      : [{ id: "analysis-error", severity: "blocking" as const, message: analysisError }]),
+      : [
+          {
+            id: "analysis-error",
+            severity: "blocking" as const,
+            message: analysisError,
+          },
+        ]),
   ];
   const pasteFlow = (
-    <section aria-label="Paste flow" style={{ background: "var(--surface)", borderRadius: "0.75rem", padding: "1rem" }}>
+    <section
+      aria-label="Paste flow"
+      style={{
+        background: "var(--surface)",
+        borderRadius: "0.75rem",
+        padding: "1rem",
+      }}
+    >
       <h1>Analyze an options entry</h1>
       <p style={{ color: "var(--muted)" }}>
-        Manually paste a private long call or put alert. Analysis is advisory only.
+        Manually paste a private long call or put alert. Analysis is advisory
+        only.
       </p>
       <AlertPasteForm
         traderRepository={traderRepository}
@@ -299,14 +381,19 @@ export const DashboardWorkflow = ({
         onAnalyze={selectAlert}
       />
       {pendingAlert === null || dte === null ? null : (
-        <section aria-label="Manual analysis inputs" style={{ marginTop: "1.5rem" }}>
+        <section
+          aria-label="Manual analysis inputs"
+          style={{ marginTop: "1.5rem" }}
+        >
           <h2>Confirm market snapshot</h2>
           <label htmlFor="planned-quantity">Planned quantity</label>
           <select
             disabled={analyzing}
             id="planned-quantity"
             value={quantity}
-            onChange={(event) => setQuantity(Number(event.target.value) as 1 | 2 | 3)}
+            onChange={(event) =>
+              setQuantity(Number(event.target.value) as 1 | 2 | 3)
+            }
           >
             <option value="1">1</option>
             <option value="2">2</option>
@@ -333,7 +420,10 @@ export const DashboardWorkflow = ({
       )}
       {completed === null ? null : (
         <div style={{ display: "grid", gap: "1rem", marginTop: "1.5rem" }}>
-          <HybridAnalysisBlock analysis={completed.analysis} contract={completed.contract} />
+          <HybridAnalysisBlock
+            analysis={completed.analysis}
+            contract={completed.contract}
+          />
           <PurchaseDecision
             analysis={completed.analysis}
             analysisId={completed.analysisId}
@@ -346,7 +436,8 @@ export const DashboardWorkflow = ({
             onRefresh={async () =>
               err({
                 code: "database",
-                message: "Confirm a new manual snapshot in Saved Wait candidates.",
+                message:
+                  "Confirm a new manual snapshot in Saved Wait candidates.",
               })
             }
             now={now}
@@ -356,7 +447,14 @@ export const DashboardWorkflow = ({
     </section>
   );
   const savedCandidates = (
-    <section aria-label="Saved Wait candidates" style={{ background: "var(--surface)", borderRadius: "0.75rem", padding: "1rem" }}>
+    <section
+      aria-label="Saved Wait candidates"
+      style={{
+        background: "var(--surface)",
+        borderRadius: "0.75rem",
+        padding: "1rem",
+      }}
+    >
       <h2>Saved Wait candidates</h2>
       {initialCandidates.length === 0 ? (
         <p>No saved Wait candidates.</p>
@@ -365,9 +463,15 @@ export const DashboardWorkflow = ({
           <SavedCandidateReview
             key={item.candidate.id}
             item={item}
+            decisionRepository={decisionRepository}
+            watchCandidateRepository={watchCandidateRepository}
             refreshAction={
               refreshCandidateAction ??
-              (async () => err({ code: "database", message: "Candidate refresh is unavailable." }))
+              (async () =>
+                err({
+                  code: "database",
+                  message: "Candidate refresh is unavailable.",
+                }))
             }
             now={now}
           />
@@ -376,26 +480,49 @@ export const DashboardWorkflow = ({
     </section>
   );
   const latestAnalysis = (
-    <section aria-label="Latest completed analysis" style={{ background: "var(--surface)", borderRadius: "0.75rem", padding: "1rem" }}>
+    <section
+      aria-label="Latest completed analysis"
+      style={{
+        background: "var(--surface)",
+        borderRadius: "0.75rem",
+        padding: "1rem",
+      }}
+    >
       <h2>Latest completed analysis</h2>
       {completed ? (
-        <p>{completed.analysis.verdict} · {completed.analysis.score}% evidence strength · {completed.analyzedAt}</p>
+        <p>
+          {completed.analysis.verdict} · {completed.analysis.score}% evidence
+          strength · {completed.analyzedAt}
+        </p>
       ) : initialLatestAnalysis ? (
-        <p>{initialLatestAnalysis.verdict} · {initialLatestAnalysis.evidenceScore}% evidence strength · {initialLatestAnalysis.analyzedAt}</p>
+        <p>
+          {initialLatestAnalysis.verdict} ·{" "}
+          {initialLatestAnalysis.evidenceScore}% evidence strength ·{" "}
+          {initialLatestAnalysis.analyzedAt}
+        </p>
       ) : (
         <p>No completed analysis yet.</p>
       )}
     </section>
   );
   const recentDecisions = (
-    <section aria-label="Recent decisions" style={{ background: "var(--surface)", borderRadius: "0.75rem", padding: "1rem" }}>
+    <section
+      aria-label="Recent decisions"
+      style={{
+        background: "var(--surface)",
+        borderRadius: "0.75rem",
+        padding: "1rem",
+      }}
+    >
       <h2>Recent decisions</h2>
       {initialRecentDecisions.length === 0 ? (
         <p>No recorded decisions yet.</p>
       ) : (
         <ul>
           {initialRecentDecisions.map((decision) => (
-            <li key={decision.id}>{decision.decision} · {decision.decidedAt}</li>
+            <li key={decision.id}>
+              {decision.decision} · {decision.decidedAt}
+            </li>
           ))}
         </ul>
       )}

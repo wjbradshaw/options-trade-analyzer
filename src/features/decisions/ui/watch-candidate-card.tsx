@@ -31,6 +31,7 @@ export interface WatchCandidateCardProps {
   onRefresh: (
     candidate: SavedWatchCandidate,
   ) => Promise<Result<WatchCandidateRefresh, RepositoryError>>;
+  onRefreshed?: (refresh: WatchCandidateRefresh) => void;
 }
 
 const WatchCandidateCardState = ({
@@ -39,8 +40,11 @@ const WatchCandidateCardState = ({
   sourceAnalyzedAt,
   initialRefresh,
   onRefresh,
+  onRefreshed,
 }: WatchCandidateCardProps) => {
-  const [refresh, setRefresh] = useState<WatchCandidateRefresh | null>(initialRefresh ?? null);
+  const [refresh, setRefresh] = useState<WatchCandidateRefresh | null>(
+    initialRefresh ?? null,
+  );
   const [refreshError, setRefreshError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -56,6 +60,7 @@ const WatchCandidateCardState = ({
     }
 
     setRefresh(result.value);
+    onRefreshed?.(result.value);
   };
 
   return (
@@ -76,8 +81,11 @@ const WatchCandidateCardState = ({
       {refreshError === null ? null : <p role="alert">{refreshError}</p>}
       {refresh === null ? null : (
         <section aria-label="Analysis refresh result">
-          {refresh.beforeAnalysis.verdict === "Wait" && refresh.latestAnalysis.verdict === "Consider" ? (
-            <p role="status">Review again - this setup moved from Wait to Consider</p>
+          {refresh.beforeAnalysis.verdict === "Wait" &&
+          refresh.latestAnalysis.verdict === "Consider" ? (
+            <p role="status">
+              Review again - this setup moved from Wait to Consider
+            </p>
           ) : null}
           <p>Before: {refresh.beforeAnalysis.verdict}</p>
           <p>After: {refresh.latestAnalysis.verdict}</p>
@@ -86,7 +94,8 @@ const WatchCandidateCardState = ({
             {refresh.beforeAnalyzedAt}
           </p>
           <p>
-            Latest analysis: {refresh.latestAnalysis.verdict} · {refresh.latestAnalyzedAt}
+            Latest analysis: {refresh.latestAnalysis.verdict} ·{" "}
+            {refresh.latestAnalyzedAt}
           </p>
           <h4>Changed evidence</h4>
           {refresh.changedEvidence.length === 0 ? (
