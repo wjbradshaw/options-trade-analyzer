@@ -21,7 +21,7 @@ The approved specification resolves any conflict with the plan or this handoff.
 
 - Workspace: `C:\Users\rjsc\Documents\Codex\2026-08-17\options-trade-analyzer`
 - Branch: `phase-1-entry-analyzer`
-- Current implementation head: `8b45705 fix: harden decision persistence and refresh`
+- Current implementation head: `114c63a fix: address dashboard workflow review findings`
 - No remote push, merge, or deployment has been performed.
 
 ## Phase One constraints that must remain intact
@@ -47,32 +47,34 @@ The approved specification resolves any conflict with the plan or this handoff.
 | 6. Deterministic evidence scoring and verdicts | Reviewed complete | `37a3cc3`, `7e3a5d9`, `9a4b480` |
 | 7. Alert intake and confirmation interface | Reviewed complete | `b2ad363`, `bf0489a` |
 | 8. Hybrid analysis block and purchase decision | Reviewed complete | `ce99f2c`, `8b45705` |
+| 9. Server orchestration and dashboard workflow | Reviewed complete; live verification passed | `14217fb`, `114c63a` |
 
 Task 4 includes a passwordless Supabase login/callback, typed client/server repositories, a Phase One migration with RLS and tenant-safe foreign keys, confirmed-contract enforcement before persisted analyses, and `Wait` candidate integrity. Its review/fix loop closed with no open code findings.
 
 ## Fresh verification evidence
 
-At Task 8 head (`8b45705`), the controller ran successfully:
+At Task 9 head (`114c63a`), the controller ran successfully:
 
 ```powershell
-node_modules/.bin/vitest.cmd run tests/components/hybrid-analysis-block.test.tsx tests/components/purchase-decision.test.tsx tests/unit/repository-contracts.test.ts tests/unit/analyzer.test.ts
-                                                 # 4 files, 49 tests passed
-node_modules/.bin/vitest.cmd run                 # 15 files, 109 tests passed
+node_modules/.bin/vitest.cmd run tests/components/dashboard.test.tsx tests/components/manual-snapshot-form.test.tsx
+                                                 # 2 files, 18 tests passed
+node_modules/.bin/vitest.cmd run                 # 19 files, 149 tests passed
 node_modules/.bin/eslint.cmd .                   # exit 0
 node_modules/.bin/tsc.cmd --noEmit               # exit 0
 $env:NEXT_PUBLIC_SUPABASE_URL='http://127.0.0.1:54321'
 $env:NEXT_PUBLIC_SUPABASE_ANON_KEY='test-anon-key'
 node_modules/.bin/next.cmd build                 # exit 0
-git diff --check 1ce0221..HEAD                   # exit 0
+node_modules/.bin/supabase.cmd db reset          # migrations 0001 and 0002 applied
+node_modules/.bin/supabase.cmd test db           # 22/22 pgTAP assertions passed
 ```
 
 Task 8 adds the decision-first hybrid analysis presentation and purchase-decision flow. It shows the exact Consider/Wait/Pass verdict, setup-evidence percentage and disclaimer, contract/DTE/break-even/maximum-loss/catalyst facts, supporting and blocking evidence with text-plus-color statuses, and source timestamps in native expandable detail. Purchased decisions require a positive fill, quantity one through three, and an explicit timezone-bearing timestamp normalized to UTC; Purchased and Skipped persist the exact `phase-1-v1` model version and are protected against duplicate writes.
 
 Saved for review remains separate from purchased/skipped decisions through a typed watch-candidate repository over the existing Task 4 table. It is Wait-only, preserves every unresolved confirmation condition and immutable source analysis, and exposes a manual Refresh analysis callback contract that advances only the latest-analysis pointer after a new snapshot and analysis are persisted. The card shows before/after verdicts, evidence changes, and timestamps. No polling, automatic re-evaluation, push, brokerage action, or Phase Two behavior was added. Independent review closed one fix round with no open Critical or Important findings.
 
-Tasks 7 and 8 components are intentionally not routed yet; Task 9 owns server orchestration and dashboard composition. Browser desktop/mobile page QA must occur there rather than adding a temporary out-of-plan route now.
+Task 9 routes the complete entry workflow through the authenticated dashboard: options-budget setup, paste/parse/correct/source selection, manual snapshot, atomic persisted analysis, hybrid result, Purchased/Skipped/Saved for review decisions, and manual Wait refresh. A new authenticated Postgres RPC commits alert, snapshot, and completed analysis as one transaction; a second transaction inserts refresh evidence and advances only the candidate's latest pointer. The original analysis and unresolved conditions remain immutable and visible after reload.
 
-Task 4's clean reset and 12 live pgTAP assertions remain the latest database-policy evidence; Tasks 5 and 6 did not change persistence.
+Independent review closed one fix round covering persisted before/current refresh comparison, profile-load error separation, and duplicate-submission protection. The Task 7 narrow-screen raw-text wrapping, positive strike minimum, and independent critical-field gate cases were also closed. Browser QA covered the real protected-route redirect/login surface plus desktop and 390x844 mobile dashboard workflow rendering with no horizontal overflow or app console errors. Task 10 still owns the authenticated desktop/mobile Playwright journey and accessibility gate.
 
 The build emits the known Next 16 warning that `middleware.ts` is deprecated in favor of `proxy.ts`. Keep `middleware.ts` for now because the approved Task 4 plan explicitly requires it; do not migrate without a plan update.
 
@@ -90,14 +92,11 @@ Supabase CLI state under `supabase/.temp/` and `supabase/.branches/` is generate
 
 ## Next implementation step
 
-Start **Task 9: Server orchestration and dashboard workflow** from the approved plan. Follow the existing workflow: test-first implementation, commit, independent task review, fix loop if needed, fresh verification, then update this handoff and the SDD ledger. Task 9 has not started.
+Start **Task 10: End-to-end verification, accessibility, and documentation** from the approved plan. Add authenticated desktop/mobile Playwright coverage, axe checks, setup/operations documentation, then run final whole-branch review and the branch-finishing workflow. Task 10 has not started.
 
 ## Known non-blocking follow-ups
 
 - `pnpm-workspace.yaml` retains pnpm’s generated `unrs-resolver` build-approval placeholder; it has no product behavior impact.
 - Replace `src/lib/supabase/database.types.ts` with generated Supabase types once a database environment is available, after comparing generated and hand-maintained shapes.
 - Task 6's fixed weights and returned factor arrays are readonly at compile time but are not frozen at runtime. This deferred Minor should be reconsidered during the final whole-branch review.
-- Task 7's combined missing-field test does not independently cover missing ticker, expiration, and trader source. Reconsider expanding the gate matrix during final review or Task 9 integration.
-- Task 7's raw-text `<pre>` needs explicit narrow-screen wrapping or overflow protection when it is placed in the styled Task 9 dashboard.
-- Task 7's strike input advertises native `min="0"` while its conversion rejects zero; align that constraint during the next UI integration or final review.
-- Task 8's `PurchaseDecision` is large because it owns three decision branches, validation, two persistence paths, and candidate rendering. During Task 9 integration or final review, consider extracting focused internal subforms/handlers only if that reduces risk without changing the planned public boundary.
+- Task 8's `PurchaseDecision` is large because it owns three decision branches, validation, two persistence paths, and candidate rendering. The final whole-branch review should decide whether a focused extraction reduces risk without changing the planned public boundary.
