@@ -49,6 +49,11 @@ export interface WatchCandidateRepository {
   ): Promise<Result<SavedWatchCandidate, RepositoryError>>;
 }
 
+export interface WatchCandidateReadRepository {
+  listWatchingCandidates(): Promise<Result<SavedWatchCandidate[], RepositoryError>>;
+  getCandidate(id: string): Promise<Result<SavedWatchCandidate, RepositoryError>>;
+}
+
 export const mapWatchCandidateRow = (
   row: TableRow<"watch_candidates">,
 ): SavedWatchCandidate => ({
@@ -65,7 +70,9 @@ export const mapWatchCandidateRow = (
   updatedAt: row.updated_at,
 });
 
-export class SupabaseWatchCandidateRepository implements WatchCandidateRepository {
+export class SupabaseWatchCandidateRepository
+  implements WatchCandidateRepository, WatchCandidateReadRepository
+{
   constructor(private readonly client: SupabaseClient<Database>) {}
 
   async saveCandidate(
@@ -107,6 +114,29 @@ export class SupabaseWatchCandidateRepository implements WatchCandidateRepositor
       .single();
 
     if (error) return err(databaseError(error));
+    return ok(mapWatchCandidateRow(data));
+  }
+
+  async listWatchingCandidates(): Promise<Result<SavedWatchCandidate[], RepositoryError>> {
+    const { data, error } = await this.client
+      .from("watch_candidates")
+      .select("*")
+      .eq("status", "watching")
+      .order("updated_at", { ascending: false });
+
+    if (error) return err(databaseError(error));
+    return ok(data.map(mapWatchCandidateRow));
+  }
+
+  async getCandidate(id: string): Promise<Result<SavedWatchCandidate, RepositoryError>> {
+    const { data, error } = await this.client
+      .from("watch_candidates")
+      .select("*")
+      .eq("id", id)
+      .maybeSingle();
+
+    if (error) return err(databaseError(error));
+    if (!data) return err({ code: "not_found", message: "Watch candidate was not found" });
     return ok(mapWatchCandidateRow(data));
   }
 }

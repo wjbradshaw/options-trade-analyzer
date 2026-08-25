@@ -65,7 +65,12 @@ export const ParsedAlertEditor = ({ alert, onChange }: ParsedAlertEditorProps) =
     <section aria-label="Corrected trade alert" style={{ display: "grid", gap: "0.75rem" }}>
       <div>
         <p>Original pasted alert</p>
-        <pre aria-label="Original pasted alert text">{alert.rawText}</pre>
+        <pre
+          aria-label="Original pasted alert text"
+          style={{ margin: 0, maxWidth: "100%", overflowWrap: "anywhere", whiteSpace: "pre-wrap" }}
+        >
+          {alert.rawText}
+        </pre>
       </div>
       <div>
         <label htmlFor="alert-symbol">Ticker</label>
@@ -105,7 +110,7 @@ export const ParsedAlertEditor = ({ alert, onChange }: ParsedAlertEditorProps) =
           aria-describedby={invalidFields.has("strike") ? "alert-strike-error" : undefined}
           aria-invalid={invalidFields.has("strike")}
           id="alert-strike"
-          min="0"
+          min="0.0001"
           name="strike"
           step="any"
           type="number"

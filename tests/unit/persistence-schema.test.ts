@@ -6,6 +6,10 @@ const migration = readFileSync(
   resolve(process.cwd(), "supabase/migrations/0001_phase1.sql"),
   "utf8",
 ).replace(/\s+/g, " ");
+const workflowMigrationPath = resolve(
+  process.cwd(),
+  "supabase/migrations/0002_analysis_workflow_rpc.sql",
+);
 
 describe("confirmed option-contract persistence", () => {
   it("only permits confirmation when all required option fields are present", () => {
@@ -84,6 +88,31 @@ describe("watch-candidate source semantics", () => {
     );
     expect(migration).toMatch(
       /foreign key \(source_analysis_id, user_id, trade_alert_id, source_analysis_verdict\) references public\.entry_analyses \(id, user_id, trade_alert_id, verdict\)/,
+    );
+  });
+});
+
+describe("transactional analysis workflow", () => {
+  it("commits alert, snapshot, and completed analysis inside one authenticated RPC", () => {
+    const workflowMigration = readFileSync(workflowMigrationPath, "utf8").replace(
+      /\s+/g,
+      " ",
+    );
+
+    expect(workflowMigration).toMatch(
+      /create or replace function public\.commit_entry_analysis_workflow/,
+    );
+    expect(workflowMigration).toMatch(/if auth\.uid\(\) is distinct from p_user_id/);
+    expect(workflowMigration).toMatch(/insert into public\.trade_alerts/);
+    expect(workflowMigration).toMatch(/insert into public\.market_snapshots/);
+    expect(workflowMigration).toMatch(/insert into public\.entry_analyses/);
+    expect(workflowMigration).toMatch(/revoke all on function .* from public, anon/);
+    expect(workflowMigration).toMatch(/grant execute on function .* to authenticated/);
+    expect(workflowMigration).toMatch(
+      /create or replace function public\.commit_wait_candidate_refresh/,
+    );
+    expect(workflowMigration).toMatch(
+      /update public\.watch_candidates set latest_analysis_id = v_analysis_id/,
     );
   });
 });

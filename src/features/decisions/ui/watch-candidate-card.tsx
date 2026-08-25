@@ -74,6 +74,9 @@ const WatchCandidateCardState = ({
       {refreshError === null ? null : <p role="alert">{refreshError}</p>}
       {refresh === null ? null : (
         <section aria-label="Analysis refresh result">
+          {refresh.beforeAnalysis.verdict === "Wait" && refresh.latestAnalysis.verdict === "Consider" ? (
+            <p role="status">Review again - this setup moved from Wait to Consider</p>
+          ) : null}
           <p>Before: {refresh.beforeAnalysis.verdict}</p>
           <p>After: {refresh.latestAnalysis.verdict}</p>
           <p>

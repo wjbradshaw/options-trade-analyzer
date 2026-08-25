@@ -1,6 +1,6 @@
 begin;
 
-select plan(12);
+select plan(22);
 
 -- This test fails if the authenticated CRUD grants are removed from the
 -- migration, even though the ownership policies still exist.
@@ -219,9 +219,10 @@ select throws_ok(
 select results_eq(
   $$
     insert into public.watch_candidates (
-      user_id, trade_alert_id, source_analysis_id,
+      id, user_id, trade_alert_id, source_analysis_id,
       source_analysis_verdict, latest_analysis_id
     ) values (
+      '77777777-7777-7777-7777-777777777777',
       '11111111-1111-1111-1111-111111111111',
       '33333333-3333-3333-3333-333333333333',
       '66666666-6666-6666-6666-666666666666', 'Wait',
@@ -231,6 +232,109 @@ select results_eq(
   $$,
   array['66666666-6666-6666-6666-666666666666'::uuid],
   'a valid Wait candidate uses an actual Wait source analysis'
+);
+
+select ok(
+  has_function_privilege(
+    'authenticated',
+    'public.commit_entry_analysis_workflow(uuid,uuid,text,jsonb,text,text,numeric,date,numeric,timestamptz,jsonb,jsonb,jsonb,timestamptz,text,numeric,jsonb,text,timestamptz)',
+    'EXECUTE'
+  ),
+  'authenticated can execute the initial analysis transaction'
+);
+
+select ok(
+  not has_function_privilege(
+    'anon',
+    'public.commit_entry_analysis_workflow(uuid,uuid,text,jsonb,text,text,numeric,date,numeric,timestamptz,jsonb,jsonb,jsonb,timestamptz,text,numeric,jsonb,text,timestamptz)',
+    'EXECUTE'
+  ),
+  'anon cannot execute the initial analysis transaction'
+);
+
+select ok(
+  has_function_privilege(
+    'authenticated',
+    'public.commit_wait_candidate_refresh(uuid,uuid,uuid,jsonb,timestamptz,text,numeric,jsonb,text,timestamptz)',
+    'EXECUTE'
+  ),
+  'authenticated can execute the candidate refresh transaction'
+);
+
+select ok(
+  not has_function_privilege(
+    'anon',
+    'public.commit_wait_candidate_refresh(uuid,uuid,uuid,jsonb,timestamptz,text,numeric,jsonb,text,timestamptz)',
+    'EXECUTE'
+  ),
+  'anon cannot execute the candidate refresh transaction'
+);
+
+select isnt(
+  public.commit_entry_analysis_workflow(
+    '11111111-1111-1111-1111-111111111111',
+    'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+    'Transactional workflow alert',
+    '{"expiration":"1/18"}',
+    'ACME', 'call', 100, '2030-01-18', 1.25, now(), '[]', '[]',
+    '{"optionPremium":1.25,"underlyingPrice":100,"source":"manual","dte":5}',
+    now(), 'Wait', 65,
+    '{"modelVersion":"phase-1-v1","evidenceCoverage":45,"factors":[]}',
+    'Wait for confirmation', now()
+  )->>'analysis_id',
+  null::text,
+  'initial analysis RPC returns a completed analysis identifier'
+);
+
+select is(
+  (select count(*)::integer from public.trade_alerts where raw_text = 'Transactional workflow alert'),
+  1,
+  'initial analysis RPC persists its alert exactly once'
+);
+
+select throws_ok(
+  $$
+    select public.commit_entry_analysis_workflow(
+      '11111111-1111-1111-1111-111111111111',
+      'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+      'Must roll back completely', '{}',
+      'ACME', 'call', 100, '2030-01-18', 1.25, now(), '[]', '[]',
+      '{"optionPremium":1.25,"underlyingPrice":100,"source":"manual","dte":5}',
+      now(), 'Invalid', 65, '{"factors":[]}', null, now()
+    )
+  $$,
+  '23514',
+  null,
+  'analysis-stage constraint failure aborts the workflow RPC'
+);
+
+select is_empty(
+  $$select id from public.trade_alerts where raw_text = 'Must roll back completely'$$,
+  'failed analysis RPC leaves no partial alert write'
+);
+
+select isnt(
+  public.commit_wait_candidate_refresh(
+    '11111111-1111-1111-1111-111111111111',
+    '77777777-7777-7777-7777-777777777777',
+    '33333333-3333-3333-3333-333333333333',
+    '{"optionPremium":1.30,"underlyingPrice":101,"source":"manual","dte":4}',
+    now(), 'Consider', 75,
+    '{"modelVersion":"phase-1-v1","evidenceCoverage":80,"factors":[]}',
+    'Confirmation improved', now()
+  )->>'analysis_id',
+  null::text,
+  'candidate refresh returns the newly persisted analysis identifier'
+);
+
+select isnt(
+  (
+    select latest_analysis_id
+    from public.watch_candidates
+    where id = '77777777-7777-7777-7777-777777777777'
+  ),
+  '66666666-6666-6666-6666-666666666666'::uuid,
+  'candidate refresh advances the latest analysis pointer'
 );
 
 select * from finish();

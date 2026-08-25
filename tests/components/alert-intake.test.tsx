@@ -170,6 +170,50 @@ describe("AlertPasteForm", () => {
     expect(screen.getByText(/call or put is required/i)).toBeVisible();
   });
 
+  it.each([
+    ["ticker", "Ticker"],
+    ["expiration", "Expiration"],
+  ])("independently blocks a missing %s", async (_field, label) => {
+    const user = userEvent.setup();
+    const onAnalyze = renderForm();
+
+    await user.type(screen.getByLabelText(/paste trade alert/i), "NBIS 8/14 220c @2.98");
+    await user.click(screen.getByRole("button", { name: /parse alert/i }));
+    await user.clear(screen.getByLabelText(label));
+    await user.selectOptions(
+      screen.getByRole("combobox", { name: "Trader source" }),
+      source.id,
+    );
+
+    expect(screen.getByRole("button", { name: /analyze entry/i })).toBeDisabled();
+    expect(onAnalyze).not.toHaveBeenCalled();
+  });
+
+  it("independently blocks a missing trader source", async () => {
+    const user = userEvent.setup();
+    const onAnalyze = renderForm(new InMemoryTraderRepository([]));
+
+    await user.type(screen.getByLabelText(/paste trade alert/i), "NBIS 8/14 220c @2.98");
+    await user.click(screen.getByRole("button", { name: /parse alert/i }));
+
+    expect(screen.getByRole("button", { name: /analyze entry/i })).toBeDisabled();
+    expect(onAnalyze).not.toHaveBeenCalled();
+  });
+
+  it("wraps the preserved raw alert and advertises a strictly positive strike", async () => {
+    const user = userEvent.setup();
+    renderForm();
+
+    await user.type(screen.getByLabelText(/paste trade alert/i), "NBIS 8/14 220c @2.98");
+    await user.click(screen.getByRole("button", { name: /parse alert/i }));
+
+    expect(screen.getByLabelText("Original pasted alert text")).toHaveStyle({
+      whiteSpace: "pre-wrap",
+      overflowWrap: "anywhere",
+    });
+    expect(screen.getByLabelText("Strike")).toHaveAttribute("min", "0.0001");
+  });
+
   it("keeps analysis disabled for a malformed corrected expiration", async () => {
     const user = userEvent.setup();
     renderForm();

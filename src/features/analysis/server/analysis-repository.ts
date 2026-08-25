@@ -31,6 +31,11 @@ export interface AnalysisRepository {
   ): Promise<Result<SavedAnalysis, RepositoryError>>;
 }
 
+export interface AnalysisReadRepository {
+  getAnalysis(id: string): Promise<Result<SavedAnalysis, RepositoryError>>;
+  getLatestAnalysis(): Promise<Result<SavedAnalysis | null, RepositoryError>>;
+}
+
 export const mapAnalysisRow = (row: TableRow<"entry_analyses">): SavedAnalysis => ({
   id: row.id,
   userId: row.user_id,
@@ -45,7 +50,7 @@ export const mapAnalysisRow = (row: TableRow<"entry_analyses">): SavedAnalysis =
   updatedAt: row.updated_at,
 });
 
-export class SupabaseAnalysisRepository implements AnalysisRepository {
+export class SupabaseAnalysisRepository implements AnalysisRepository, AnalysisReadRepository {
   constructor(private readonly client: SupabaseClient<Database>) {}
 
   async saveAnalysis(
@@ -69,5 +74,29 @@ export class SupabaseAnalysisRepository implements AnalysisRepository {
 
     if (error) return err(databaseError(error));
     return ok(mapAnalysisRow(data));
+  }
+
+  async getAnalysis(id: string): Promise<Result<SavedAnalysis, RepositoryError>> {
+    const { data, error } = await this.client
+      .from("entry_analyses")
+      .select("*")
+      .eq("id", id)
+      .maybeSingle();
+
+    if (error) return err(databaseError(error));
+    if (!data) return err({ code: "not_found", message: "Entry analysis was not found" });
+    return ok(mapAnalysisRow(data));
+  }
+
+  async getLatestAnalysis(): Promise<Result<SavedAnalysis | null, RepositoryError>> {
+    const { data, error } = await this.client
+      .from("entry_analyses")
+      .select("*")
+      .order("analyzed_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (error) return err(databaseError(error));
+    return ok(data ? mapAnalysisRow(data) : null);
   }
 }

@@ -138,4 +138,18 @@ describe("ManualSnapshotForm", () => {
       "Confirmed at: 2026-08-14T15:00:00.000Z. Freshness: fresh.",
     );
   });
+
+  it("uses unique field identifiers when multiple saved candidates render refresh forms", () => {
+    render(
+      <>
+        <ManualSnapshotForm idPrefix="candidate-a" dte={5} onConfirm={() => undefined} />
+        <ManualSnapshotForm idPrefix="candidate-b" dte={5} onConfirm={() => undefined} />
+      </>,
+    );
+
+    expect(document.querySelectorAll("#candidate-a-option-premium")).toHaveLength(1);
+    expect(document.querySelectorAll("#candidate-b-option-premium")).toHaveLength(1);
+    expect(document.querySelectorAll("#candidate-a-underlying-price")).toHaveLength(1);
+    expect(document.querySelectorAll("#candidate-b-underlying-price")).toHaveLength(1);
+  });
 });

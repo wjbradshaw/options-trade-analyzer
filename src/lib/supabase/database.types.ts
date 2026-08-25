@@ -176,7 +176,47 @@ export interface Database {
       >;
     };
     Views: Record<string, never>;
-    Functions: Record<string, never>;
+    Functions: {
+      commit_entry_analysis_workflow: {
+        Args: {
+          p_user_id: string;
+          p_trader_source_id: string;
+          p_raw_text: string;
+          p_corrected_fields: Json;
+          p_symbol: string;
+          p_option_side: string;
+          p_strike: number;
+          p_expiration: string;
+          p_alerted_premium: number | null;
+          p_submitted_at: string;
+          p_tags: Json;
+          p_parse_issues: Json;
+          p_snapshot_payload: Json;
+          p_captured_at: string;
+          p_verdict: string;
+          p_evidence_score: number;
+          p_analysis_payload: Json;
+          p_summary: string | null;
+          p_analyzed_at: string;
+        };
+        Returns: Json;
+      };
+      commit_wait_candidate_refresh: {
+        Args: {
+          p_user_id: string;
+          p_candidate_id: string;
+          p_trade_alert_id: string;
+          p_snapshot_payload: Json;
+          p_captured_at: string;
+          p_verdict: string;
+          p_evidence_score: number;
+          p_analysis_payload: Json;
+          p_summary: string | null;
+          p_analyzed_at: string;
+        };
+        Returns: Json;
+      };
+    };
     Enums: Record<string, never>;
     CompositeTypes: Record<string, never>;
   };

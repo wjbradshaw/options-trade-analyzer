@@ -39,6 +39,10 @@ export interface DecisionRepository {
   ): Promise<Result<SavedDecision, RepositoryError>>;
 }
 
+export interface DecisionHistoryRepository {
+  listRecentDecisions(limit?: number): Promise<Result<SavedDecision[], RepositoryError>>;
+}
+
 export const mapDecisionRow = (row: TableRow<"trade_decisions">): SavedDecision => {
   const base = {
     id: row.id,
@@ -63,7 +67,7 @@ export const mapDecisionRow = (row: TableRow<"trade_decisions">): SavedDecision 
   return { ...base, decision: "skipped", quantity: null, entryPremium: null };
 };
 
-export class SupabaseDecisionRepository implements DecisionRepository {
+export class SupabaseDecisionRepository implements DecisionRepository, DecisionHistoryRepository {
   constructor(private readonly client: SupabaseClient<Database>) {}
 
   async saveDecision(
@@ -86,5 +90,16 @@ export class SupabaseDecisionRepository implements DecisionRepository {
 
     if (error) return err(databaseError(error));
     return ok(mapDecisionRow(data));
+  }
+
+  async listRecentDecisions(limit = 10): Promise<Result<SavedDecision[], RepositoryError>> {
+    const { data, error } = await this.client
+      .from("trade_decisions")
+      .select("*")
+      .order("decided_at", { ascending: false })
+      .limit(limit);
+
+    if (error) return err(databaseError(error));
+    return ok(data.map(mapDecisionRow));
   }
 }

@@ -11,6 +11,7 @@ import {
 
 export interface ManualSnapshotFormProps {
   dte: number;
+  idPrefix?: string;
   now?: () => Date;
   onConfirm: (snapshot: MarketSnapshot) => void;
 }
@@ -41,9 +42,12 @@ const invalidPriceMessage = (optionPremium: number | null, underlyingPrice: numb
 
 export const ManualSnapshotForm = ({
   dte,
+  idPrefix,
   now = () => new Date(),
   onConfirm,
 }: ManualSnapshotFormProps) => {
+  const optionPremiumId = idPrefix ? `${idPrefix}-option-premium` : "option-premium";
+  const underlyingPriceId = idPrefix ? `${idPrefix}-underlying-price` : "underlying-price";
   const [optionPremium, setOptionPremium] = useState("");
   const [underlyingPrice, setUnderlyingPrice] = useState("");
   const [confirmation, setConfirmation] = useState<MarketSnapshot | null>(null);
@@ -88,9 +92,9 @@ export const ManualSnapshotForm = ({
   return (
     <form onSubmit={submit}>
       <div>
-        <label htmlFor="option-premium">User-entered option premium</label>
+        <label htmlFor={optionPremiumId}>User-entered option premium</label>
         <input
-          id="option-premium"
+          id={optionPremiumId}
           name="optionPremium"
           type="number"
           step="any"
@@ -99,9 +103,9 @@ export const ManualSnapshotForm = ({
         />
       </div>
       <div>
-        <label htmlFor="underlying-price">User-entered underlying price</label>
+        <label htmlFor={underlyingPriceId}>User-entered underlying price</label>
         <input
-          id="underlying-price"
+          id={underlyingPriceId}
           name="underlyingPrice"
           type="number"
           step="any"
