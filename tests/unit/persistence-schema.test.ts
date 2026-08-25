@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -10,10 +10,16 @@ const workflowMigrationPath = resolve(
   process.cwd(),
   "supabase/migrations/0002_analysis_workflow_rpc.sql",
 );
+const candidateDecisionMigrationPath = resolve(
+  process.cwd(),
+  "supabase/migrations/0003_candidate_decision_rpc.sql",
+);
 
 describe("confirmed option-contract persistence", () => {
   it("only permits confirmation when all required option fields are present", () => {
-    expect(migration).toMatch(/contract_confirmed boolean not null default false/);
+    expect(migration).toMatch(
+      /contract_confirmed boolean not null default false/,
+    );
     expect(migration).toMatch(
       /check \( not contract_confirmed or \( symbol is not null and option_side is not null and strike is not null and strike > 0 and expiration is not null \) \)/,
     );
@@ -67,7 +73,9 @@ describe("same-user relationship constraints", () => {
   });
 
   it("defines unique owner keys required by the composite foreign keys", () => {
-    expect(migration).toMatch(/trader_sources_owner_key unique \(id, user_id\)/);
+    expect(migration).toMatch(
+      /trader_sources_owner_key unique \(id, user_id\)/,
+    );
     expect(migration).toMatch(/trade_alerts_owner_key unique \(id, user_id\)/);
     expect(migration).toMatch(
       /market_snapshots_owner_alert_key unique \(id, user_id, trade_alert_id\)/,
@@ -94,25 +102,59 @@ describe("watch-candidate source semantics", () => {
 
 describe("transactional analysis workflow", () => {
   it("commits alert, snapshot, and completed analysis inside one authenticated RPC", () => {
-    const workflowMigration = readFileSync(workflowMigrationPath, "utf8").replace(
-      /\s+/g,
-      " ",
-    );
+    const workflowMigration = readFileSync(
+      workflowMigrationPath,
+      "utf8",
+    ).replace(/\s+/g, " ");
 
     expect(workflowMigration).toMatch(
       /create or replace function public\.commit_entry_analysis_workflow/,
     );
-    expect(workflowMigration).toMatch(/if auth\.uid\(\) is distinct from p_user_id/);
+    expect(workflowMigration).toMatch(
+      /if auth\.uid\(\) is distinct from p_user_id/,
+    );
     expect(workflowMigration).toMatch(/insert into public\.trade_alerts/);
     expect(workflowMigration).toMatch(/insert into public\.market_snapshots/);
     expect(workflowMigration).toMatch(/insert into public\.entry_analyses/);
-    expect(workflowMigration).toMatch(/revoke all on function .* from public, anon/);
-    expect(workflowMigration).toMatch(/grant execute on function .* to authenticated/);
+    expect(workflowMigration).toMatch(
+      /revoke all on function .* from public, anon/,
+    );
+    expect(workflowMigration).toMatch(
+      /grant execute on function .* to authenticated/,
+    );
     expect(workflowMigration).toMatch(
       /create or replace function public\.commit_wait_candidate_refresh/,
     );
     expect(workflowMigration).toMatch(
       /update public\.watch_candidates set latest_analysis_id = v_analysis_id/,
+    );
+  });
+
+  it("atomically records a candidate decision against its latest analysis and resolves the candidate", () => {
+    expect(existsSync(candidateDecisionMigrationPath)).toBe(true);
+    if (!existsSync(candidateDecisionMigrationPath)) return;
+
+    const candidateDecisionMigration = readFileSync(
+      candidateDecisionMigrationPath,
+      "utf8",
+    ).replace(/\s+/g, " ");
+    expect(candidateDecisionMigration).toMatch(
+      /create or replace function public\.commit_watch_candidate_decision/,
+    );
+    expect(candidateDecisionMigration).toMatch(
+      /latest_analysis_id = p_entry_analysis_id and status = 'watching'/,
+    );
+    expect(candidateDecisionMigration).toMatch(
+      /insert into public\.trade_decisions/,
+    );
+    expect(candidateDecisionMigration).toMatch(
+      /update public\.watch_candidates set status = 'resolved'/,
+    );
+    expect(candidateDecisionMigration).toMatch(
+      /revoke all on function .* from public, anon/,
+    );
+    expect(candidateDecisionMigration).toMatch(
+      /grant execute on function .* to authenticated/,
     );
   });
 });

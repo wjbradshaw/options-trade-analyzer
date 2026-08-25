@@ -1,6 +1,10 @@
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import nextEnvironment from "@next/env";
 import { defineConfig, devices } from "@playwright/test";
+
+const { loadEnvConfig } = nextEnvironment;
+loadEnvConfig(process.cwd());
 
 const baseURL = "http://127.0.0.1:3001";
 const localSupabaseURL = "http://127.0.0.1:54321";

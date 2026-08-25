@@ -18,6 +18,7 @@ import {
   SavedCandidateReview,
 } from "@/features/dashboard/ui/dashboard-workflow";
 import type {
+  SaveCandidateDecisionInput,
   SaveDecisionInput,
   SavedDecision,
 } from "@/features/decisions/server/decision-repository";
@@ -39,6 +40,8 @@ const workflowDependencies = () => ({
   },
   decisionRepository: {
     saveDecision: async () =>
+      err({ code: "database" as const, message: "not used" }),
+    saveCandidateDecision: async () =>
       err({ code: "database" as const, message: "not used" }),
   },
   watchCandidateRepository: {
@@ -279,6 +282,8 @@ describe("Dashboard", () => {
         }}
         decisionRepository={{
           saveDecision: async () =>
+            err({ code: "database", message: "not used" }),
+          saveCandidateDecision: async () =>
             err({ code: "database", message: "not used" }),
         }}
         watchCandidateRepository={{
@@ -602,10 +607,19 @@ describe("Dashboard", () => {
       createdAt: "2026-08-14T15:00:00.000Z",
       updatedAt: "2026-08-14T15:00:00.000Z",
     };
-    let savedDecision: SaveDecisionInput | null = null;
+    let savedDecision: SaveCandidateDecisionInput | null = null;
     const decisionRepositories = {
       decisionRepository: {
         saveDecision: async (input: SaveDecisionInput) => {
+          const saved: SavedDecision = {
+            id: "decision-1",
+            ...input,
+            createdAt: "2026-08-15T15:06:00.000Z",
+            updatedAt: "2026-08-15T15:06:00.000Z",
+          };
+          return ok(saved);
+        },
+        saveCandidateDecision: async (input: SaveCandidateDecisionInput) => {
           savedDecision = structuredClone(input);
           const saved: SavedDecision = {
             id: "decision-1",
@@ -703,6 +717,7 @@ describe("Dashboard", () => {
     );
 
     expect(savedDecision).toMatchObject({
+      candidateId: "candidate-1",
       entryAnalysisId: "analysis-2",
       tradeAlertId: "alert-1",
       decision: "purchased",

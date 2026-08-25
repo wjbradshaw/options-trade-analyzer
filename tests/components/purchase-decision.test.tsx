@@ -1,13 +1,21 @@
 // @vitest-environment jsdom
 
 import "@testing-library/jest-dom/vitest";
-import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it } from "vitest";
 import type { EntryAnalysis } from "@/features/analysis/domain/analyzer";
 import type {
   DecisionRepository,
   RepositoryError as DecisionRepositoryError,
+  SaveCandidateDecisionInput,
   SaveDecisionInput,
   SavedDecision,
 } from "@/features/decisions/server/decision-repository";
@@ -26,7 +34,9 @@ const createdAt = "2026-08-24T14:00:00.000Z";
 const updatedAt = "2026-08-24T14:01:00.000Z";
 const sourceAnalyzedAt = "2026-08-24T13:50:00.000Z";
 
-const makeAnalysis = (verdict: EntryAnalysis["verdict"] = "Wait"): EntryAnalysis => ({
+const makeAnalysis = (
+  verdict: EntryAnalysis["verdict"] = "Wait",
+): EntryAnalysis => ({
   modelVersion: "phase-1-v1",
   verdict,
   score: verdict === "Consider" ? 82 : 62,
@@ -44,8 +54,7 @@ const makeAnalysis = (verdict: EntryAnalysis["verdict"] = "Wait"): EntryAnalysis
           ? "Price reclaimed the confirmation level."
           : "Price confirmation is unresolved.",
       source: verdict === "Consider" ? "Manual chart review" : null,
-      capturedAt:
-        verdict === "Consider" ? "2026-08-24T14:10:00.000Z" : null,
+      capturedAt: verdict === "Consider" ? "2026-08-24T14:10:00.000Z" : null,
     },
   ],
 });
@@ -67,11 +76,26 @@ const clone = <T,>(value: T): T => structuredClone(value);
 
 class InMemoryDecisionRepository implements DecisionRepository {
   decisions: SavedDecision[] = [];
+  candidateDecisions: SaveCandidateDecisionInput[] = [];
 
   async saveDecision(
     input: SaveDecisionInput,
   ): Promise<Result<SavedDecision, DecisionRepositoryError>> {
     const saved = {
+      id: `decision-${this.decisions.length + 1}`,
+      ...clone(input),
+      createdAt,
+      updatedAt,
+    };
+    this.decisions.push(saved);
+    return ok(clone(saved));
+  }
+
+  async saveCandidateDecision(
+    input: SaveCandidateDecisionInput,
+  ): Promise<Result<SavedDecision, DecisionRepositoryError>> {
+    this.candidateDecisions.push(clone(input));
+    const saved: SavedDecision = {
       id: `decision-${this.decisions.length + 1}`,
       ...clone(input),
       createdAt,
@@ -106,7 +130,10 @@ class InMemoryWatchCandidateRepository implements WatchCandidateRepository {
       (item) => item.id === input.candidateId && item.userId === input.userId,
     );
     if (!candidate) {
-      return err({ code: "not_found", message: "Watch candidate was not found" });
+      return err({
+        code: "not_found",
+        message: "Watch candidate was not found",
+      });
     }
     candidate.latestAnalysisId = input.latestAnalysisId;
     candidate.updatedAt = updatedAt;
@@ -116,25 +143,29 @@ class InMemoryWatchCandidateRepository implements WatchCandidateRepository {
 
 const renderDecision = ({
   analysis = makeAnalysis(),
+  analysisId = "analysis-1",
   decisionRepository = new InMemoryDecisionRepository(),
   watchCandidateRepository = new InMemoryWatchCandidateRepository(),
+  watchCandidateId,
   onRefresh = async () =>
     err({ code: "database" as const, message: "Refresh is not configured" }),
 }: Partial<React.ComponentProps<typeof PurchaseDecision>> & {
   analysis?: EntryAnalysis;
   decisionRepository?: DecisionRepository;
   watchCandidateRepository?: WatchCandidateRepository;
+  watchCandidateId?: string;
 } = {}) => {
   render(
     <PurchaseDecision
       analysis={analysis}
-      analysisId="analysis-1"
+      analysisId={analysisId}
       sourceAnalyzedAt={sourceAnalyzedAt}
       userId="user-1"
       tradeAlertId="alert-1"
       unresolvedConditions={unresolvedConditions}
       decisionRepository={decisionRepository}
       watchCandidateRepository={watchCandidateRepository}
+      watchCandidateId={watchCandidateId}
       onRefresh={onRefresh}
     />,
   );
@@ -153,7 +184,9 @@ describe("PurchaseDecision", () => {
 
     expect(screen.getByRole("combobox", { name: "Quantity" })).toHaveValue("1");
     expect(
-      within(screen.getByRole("combobox", { name: "Quantity" })).getAllByRole("option"),
+      within(screen.getByRole("combobox", { name: "Quantity" })).getAllByRole(
+        "option",
+      ),
     ).toHaveLength(3);
     expect(repository.decisions).toEqual([]);
   });
@@ -164,14 +197,20 @@ describe("PurchaseDecision", () => {
     renderDecision({ decisionRepository: repository });
     await user.click(screen.getByRole("radio", { name: "Purchased" }));
 
-    await user.type(screen.getByRole("spinbutton", { name: "Actual fill" }), "0");
+    await user.type(
+      screen.getByRole("spinbutton", { name: "Actual fill" }),
+      "0",
+    );
     await user.click(screen.getByRole("button", { name: "Save decision" }));
     expect(screen.getByRole("alert")).toHaveTextContent(
       "Actual fill must be a positive number.",
     );
 
     await user.clear(screen.getByRole("spinbutton", { name: "Actual fill" }));
-    await user.type(screen.getByRole("spinbutton", { name: "Actual fill" }), "1.32");
+    await user.type(
+      screen.getByRole("spinbutton", { name: "Actual fill" }),
+      "1.32",
+    );
     await user.click(screen.getByRole("button", { name: "Save decision" }));
     expect(screen.getByRole("alert")).toHaveTextContent(
       "Actual purchase timestamp is required.",
@@ -184,8 +223,14 @@ describe("PurchaseDecision", () => {
     const repository = new InMemoryDecisionRepository();
     renderDecision({ decisionRepository: repository });
     await user.click(screen.getByRole("radio", { name: "Purchased" }));
-    await user.selectOptions(screen.getByRole("combobox", { name: "Quantity" }), "3");
-    await user.type(screen.getByRole("spinbutton", { name: "Actual fill" }), "1.32");
+    await user.selectOptions(
+      screen.getByRole("combobox", { name: "Quantity" }),
+      "3",
+    );
+    await user.type(
+      screen.getByRole("spinbutton", { name: "Actual fill" }),
+      "1.32",
+    );
     await user.type(
       screen.getByRole("textbox", { name: "Actual purchase timestamp" }),
       "2026-08-24T14:05:00.000Z",
@@ -193,7 +238,11 @@ describe("PurchaseDecision", () => {
 
     await user.click(screen.getByRole("button", { name: "Save decision" }));
 
-    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Purchased decision saved."));
+    await waitFor(() =>
+      expect(screen.getByRole("status")).toHaveTextContent(
+        "Purchased decision saved.",
+      ),
+    );
     expect(repository.decisions).toEqual([
       expect.objectContaining({
         userId: "user-1",
@@ -208,12 +257,101 @@ describe("PurchaseDecision", () => {
     ]);
   });
 
+  it("uses the atomic candidate decision operation when purchasing a refreshed candidate", async () => {
+    const user = userEvent.setup();
+    const repository = new InMemoryDecisionRepository();
+    renderDecision({
+      analysis: makeAnalysis("Pass"),
+      analysisId: "analysis-2",
+      decisionRepository: repository,
+      watchCandidateId: "candidate-1",
+    });
+    await user.click(screen.getByRole("radio", { name: "Purchased" }));
+    await user.type(
+      screen.getByRole("spinbutton", { name: "Actual fill" }),
+      "1.25",
+    );
+    await user.type(
+      screen.getByRole("textbox", { name: "Actual purchase timestamp" }),
+      "2026-08-25T14:05:00.000Z",
+    );
+
+    await user.click(screen.getByRole("button", { name: "Save decision" }));
+
+    await screen.findByText("Purchased decision saved.");
+    expect(repository.candidateDecisions).toEqual([
+      expect.objectContaining({
+        candidateId: "candidate-1",
+        entryAnalysisId: "analysis-2",
+        decision: "purchased",
+      }),
+    ]);
+  });
+
+  it("keeps control IDs, radio groups, and labels unique across multiple actionable decisions", async () => {
+    const user = userEvent.setup();
+    const decisionRepository = new InMemoryDecisionRepository();
+    const watchCandidateRepository = new InMemoryWatchCandidateRepository();
+    const decision = (analysisId: string, tradeAlertId: string) => (
+      <PurchaseDecision
+        analysis={makeAnalysis("Pass")}
+        analysisId={analysisId}
+        sourceAnalyzedAt={sourceAnalyzedAt}
+        userId="user-1"
+        tradeAlertId={tradeAlertId}
+        unresolvedConditions={[]}
+        decisionRepository={decisionRepository}
+        watchCandidateRepository={watchCandidateRepository}
+        onRefresh={async () =>
+          err({ code: "database", message: "Refresh is not configured" })
+        }
+      />
+    );
+    render(
+      <>
+        {decision("analysis-1", "alert-1")}
+        {decision("analysis-2", "alert-2")}
+      </>,
+    );
+    const regions = screen.getAllByRole("region", {
+      name: "Purchase decision",
+    });
+    for (const region of regions) {
+      await user.click(
+        within(region).getByRole("radio", { name: "Purchased" }),
+      );
+    }
+
+    const ids = Array.from(
+      document.querySelectorAll<HTMLElement>("[id]"),
+      (element) => element.getAttribute("id"),
+    );
+    expect(new Set(ids).size).toBe(ids.length);
+    const radioNames = regions.map((region) =>
+      within(region)
+        .getByRole("radio", { name: "Purchased" })
+        .getAttribute("name"),
+    );
+    expect(new Set(radioNames).size).toBe(regions.length);
+    for (const region of regions) {
+      expect(within(region).getByLabelText("Quantity")).toBe(
+        within(region).getByRole("combobox", { name: "Quantity" }),
+      );
+      expect(within(region).getByLabelText("Actual fill")).toBe(
+        within(region).getByRole("spinbutton", { name: "Actual fill" }),
+      );
+    }
+  });
+
   it("rejects date-only and timezone-less purchase timestamps (mutation: accept an ambiguous local purchase time)", async () => {
     const user = userEvent.setup();
     const repository = new InMemoryDecisionRepository();
     renderDecision({ decisionRepository: repository });
     await user.click(screen.getByRole("radio", { name: "Purchased" }));
-    await user.type(screen.getByRole("spinbutton", { name: "Actual fill" }), "1.32");
+    await user.type(
+      screen.getByRole("spinbutton", { name: "Actual fill" }),
+      "1.32",
+    );
     const timestamp = screen.getByRole("textbox", {
       name: "Actual purchase timestamp",
     });
@@ -235,7 +373,10 @@ describe("PurchaseDecision", () => {
     const repository = new InMemoryDecisionRepository();
     renderDecision({ decisionRepository: repository });
     await user.click(screen.getByRole("radio", { name: "Purchased" }));
-    await user.type(screen.getByRole("spinbutton", { name: "Actual fill" }), "1.32");
+    await user.type(
+      screen.getByRole("spinbutton", { name: "Actual fill" }),
+      "1.32",
+    );
     await user.type(
       screen.getByRole("textbox", { name: "Actual purchase timestamp" }),
       "2026-08-24T14:05:00-04:00",
@@ -252,10 +393,15 @@ describe("PurchaseDecision", () => {
   it("saves a skipped decision without fill or quantity (mutation: require or retain purchase inputs for a declined trade)", async () => {
     const user = userEvent.setup();
     const repository = new InMemoryDecisionRepository();
-    renderDecision({ analysis: makeAnalysis("Pass"), decisionRepository: repository });
+    renderDecision({
+      analysis: makeAnalysis("Pass"),
+      decisionRepository: repository,
+    });
 
     await user.click(screen.getByRole("radio", { name: "Skipped" }));
-    expect(screen.queryByRole("spinbutton", { name: "Actual fill" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("spinbutton", { name: "Actual fill" }),
+    ).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Save decision" }));
 
     expect(repository.decisions).toEqual([
@@ -287,24 +433,36 @@ describe("PurchaseDecision", () => {
           };
         });
       },
+      saveCandidateDecision: async () =>
+        err({ code: "database", message: "not used" }),
     };
     renderDecision({ decisionRepository: repository });
     await user.click(screen.getByRole("radio", { name: "Skipped" }));
-    const form = screen.getByRole("button", { name: "Save decision" }).closest("form");
+    const form = screen
+      .getByRole("button", { name: "Save decision" })
+      .closest("form");
     if (form === null) throw new Error("Expected decision form");
 
     act(() => {
-      form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
-      form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+      form.dispatchEvent(
+        new Event("submit", { bubbles: true, cancelable: true }),
+      );
+      form.dispatchEvent(
+        new Event("submit", { bubbles: true, cancelable: true }),
+      );
     });
 
     expect(writes).toHaveLength(1);
     await act(async () => finishSave());
     await screen.findByText("Skipped decision saved.");
-    expect(screen.getByRole("button", { name: "Decision saved" })).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "Decision saved" }),
+    ).toBeDisabled();
 
     act(() => {
-      form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+      form.dispatchEvent(
+        new Event("submit", { bubbles: true, cancelable: true }),
+      );
     });
     expect(writes).toHaveLength(1);
   });
@@ -312,8 +470,14 @@ describe("PurchaseDecision", () => {
   it("guards Saved for review to Wait analyses (mutation: persist a non-Wait analysis as a watch candidate)", () => {
     renderDecision({ analysis: makeAnalysis("Consider") });
 
-    expect(screen.getByRole("radio", { name: "Saved for review" })).toBeDisabled();
-    expect(screen.getByText("Saved for review is only available for a Wait analysis.")).toBeVisible();
+    expect(
+      screen.getByRole("radio", { name: "Saved for review" }),
+    ).toBeDisabled();
+    expect(
+      screen.getByText(
+        "Saved for review is only available for a Wait analysis.",
+      ),
+    ).toBeVisible();
   });
 
   it("round-trips every unresolved condition while preserving the source Wait analysis (mutation: flatten or discard unresolved-condition JSON)", async () => {
@@ -327,7 +491,9 @@ describe("PurchaseDecision", () => {
     }
     await user.click(screen.getByRole("button", { name: "Save decision" }));
 
-    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Saved for review."));
+    await waitFor(() =>
+      expect(screen.getByRole("status")).toHaveTextContent("Saved for review."),
+    );
     expect(repository.candidates).toEqual([
       expect.objectContaining({
         userId: "user-1",
@@ -339,7 +505,9 @@ describe("PurchaseDecision", () => {
         status: "watching",
       }),
     ]);
-    expect(screen.getByText("Original analysis: Wait · 2026-08-24T13:50:00.000Z")).toBeVisible();
+    expect(
+      screen.getByText("Original analysis: Wait · 2026-08-24T13:50:00.000Z"),
+    ).toBeVisible();
   });
 
   it("manually refreshes a saved candidate while keeping original and latest analyses distinct (mutation: overwrite the original analysis during refresh)", async () => {
@@ -373,17 +541,34 @@ describe("PurchaseDecision", () => {
     });
     await user.click(screen.getByRole("radio", { name: "Saved for review" }));
     await user.click(screen.getByRole("button", { name: "Save decision" }));
-    await screen.findByText("Original analysis: Wait · 2026-08-24T13:50:00.000Z");
+    await screen.findByText(
+      "Original analysis: Wait · 2026-08-24T13:50:00.000Z",
+    );
 
     await user.click(screen.getByRole("button", { name: "Refresh analysis" }));
 
     await waitFor(() => expect(screen.getByText("Before: Wait")).toBeVisible());
+    expect(
+      screen.getByRole("region", { name: "Analysis refresh result" }),
+    ).toHaveAttribute("data-latest-analysis-id", "analysis-2");
     expect(screen.getByText("After: Consider")).toBeVisible();
-    expect(screen.getByText("Before analysis: Wait · 2026-08-24T13:55:00.000Z")).toBeVisible();
-    expect(screen.getByText("Latest analysis: Consider · 2026-08-24T14:10:00.000Z")).toBeVisible();
-    expect(screen.getByText("Before evidence: Price confirmation is unresolved.")).toBeVisible();
-    expect(screen.getByText("After evidence: Price reclaimed the confirmation level.")).toBeVisible();
-    expect(screen.getByText("Original analysis: Wait · 2026-08-24T13:50:00.000Z")).toBeVisible();
+    expect(
+      screen.getByText("Before analysis: Wait · 2026-08-24T13:55:00.000Z"),
+    ).toBeVisible();
+    expect(
+      screen.getByText("Latest analysis: Consider · 2026-08-24T14:10:00.000Z"),
+    ).toBeVisible();
+    expect(
+      screen.getByText("Before evidence: Price confirmation is unresolved."),
+    ).toBeVisible();
+    expect(
+      screen.getByText(
+        "After evidence: Price reclaimed the confirmation level.",
+      ),
+    ).toBeVisible();
+    expect(
+      screen.getByText("Original analysis: Wait · 2026-08-24T13:50:00.000Z"),
+    ).toBeVisible();
     expect(repository.candidates[0]).toMatchObject({
       sourceAnalysisId: "analysis-1",
       sourceAnalysisVerdict: "Wait",
@@ -394,7 +579,10 @@ describe("PurchaseDecision", () => {
   it("shows decision, watch persistence, and refresh repository errors visibly (mutation: swallow repository failures)", async () => {
     const user = userEvent.setup();
     const decisionRepository: DecisionRepository = {
-      saveDecision: async () => err({ code: "database", message: "Decision save failed" }),
+      saveDecision: async () =>
+        err({ code: "database", message: "Decision save failed" }),
+      saveCandidateDecision: async () =>
+        err({ code: "database", message: "Decision save failed" }),
     };
     renderDecision({ decisionRepository });
     await user.click(screen.getByRole("radio", { name: "Skipped" }));
@@ -403,7 +591,8 @@ describe("PurchaseDecision", () => {
     cleanup();
 
     const watchRepository: WatchCandidateRepository = {
-      saveCandidate: async () => err({ code: "database", message: "Watch save failed" }),
+      saveCandidate: async () =>
+        err({ code: "database", message: "Watch save failed" }),
       advanceLatestAnalysis: async () =>
         err({ code: "database", message: "Advance failed" }),
     };
@@ -416,13 +605,18 @@ describe("PurchaseDecision", () => {
     const repository = new InMemoryWatchCandidateRepository();
     renderDecision({
       watchCandidateRepository: repository,
-      onRefresh: async () => err({ code: "database", message: "Refresh failed" }),
+      onRefresh: async () =>
+        err({ code: "database", message: "Refresh failed" }),
     });
     await user.click(screen.getByRole("radio", { name: "Saved for review" }));
     await user.click(screen.getByRole("button", { name: "Save decision" }));
-    await screen.findByText("Original analysis: Wait · 2026-08-24T13:50:00.000Z");
+    await screen.findByText(
+      "Original analysis: Wait · 2026-08-24T13:50:00.000Z",
+    );
     await user.click(screen.getByRole("button", { name: "Refresh analysis" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent("Refresh failed");
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Refresh failed",
+    );
   });
 });
 
@@ -451,24 +645,25 @@ describe("WatchCandidateCard candidate identity", () => {
       latestAnalysisId: "analysis-3",
     };
     const refreshedCandidateIds: string[] = [];
-    const onRefresh: React.ComponentProps<typeof WatchCandidateCard>["onRefresh"] =
-      async (candidate) => {
-        refreshedCandidateIds.push(candidate.id);
-        return ok({
-          candidate: {
-            ...candidate,
-            latestAnalysisId: `${candidate.sourceAnalysisId}-refreshed`,
-          },
-          beforeAnalysis: makeAnalysis("Wait"),
-          beforeAnalyzedAt: sourceAnalyzedAt,
-          latestAnalysis: makeAnalysis("Consider"),
-          latestAnalyzedAt:
-            candidate.id === "candidate-1"
-              ? "2026-08-24T14:10:00.000Z"
-              : "2026-08-24T14:20:00.000Z",
-          changedEvidence: [],
-        });
-      };
+    const onRefresh: React.ComponentProps<
+      typeof WatchCandidateCard
+    >["onRefresh"] = async (candidate) => {
+      refreshedCandidateIds.push(candidate.id);
+      return ok({
+        candidate: {
+          ...candidate,
+          latestAnalysisId: `${candidate.sourceAnalysisId}-refreshed`,
+        },
+        beforeAnalysis: makeAnalysis("Wait"),
+        beforeAnalyzedAt: sourceAnalyzedAt,
+        latestAnalysis: makeAnalysis("Consider"),
+        latestAnalyzedAt:
+          candidate.id === "candidate-1"
+            ? "2026-08-24T14:10:00.000Z"
+            : "2026-08-24T14:20:00.000Z",
+        changedEvidence: [],
+      });
+    };
 
     const { rerender } = render(
       <WatchCandidateCard
@@ -493,7 +688,9 @@ describe("WatchCandidateCard candidate identity", () => {
     );
 
     expect(
-      screen.queryByText("Latest analysis: Consider · 2026-08-24T14:10:00.000Z"),
+      screen.queryByText(
+        "Latest analysis: Consider · 2026-08-24T14:10:00.000Z",
+      ),
     ).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Refresh analysis" }));
     await screen.findByText(

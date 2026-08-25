@@ -35,6 +35,7 @@ import {
   mapDecisionRow,
   type DecisionRepository,
   type RepositoryError as DecisionRepositoryError,
+  type SaveCandidateDecisionInput,
   type SaveDecisionInput,
   type SavedDecision,
 } from "@/features/decisions/server/decision-repository";
@@ -106,7 +107,8 @@ const createWatchCandidateSupabaseFake = (
         },
         single: async () => {
           const response = pendingResponses.shift();
-          if (response === undefined) throw new Error("Missing fake Supabase response");
+          if (response === undefined)
+            throw new Error("Missing fake Supabase response");
           return response;
         },
       };
@@ -139,7 +141,9 @@ class InMemoryProfileRepository implements ProfileRepository {
 class InMemoryTraderRepository implements TraderRepository {
   private sources: TraderSource[] = [];
 
-  async listTraderSources(): Promise<Result<TraderSource[], TraderRepositoryError>> {
+  async listTraderSources(): Promise<
+    Result<TraderSource[], TraderRepositoryError>
+  > {
     return ok(clone(this.sources));
   }
 
@@ -179,7 +183,9 @@ class InMemoryAlertRepository implements AlertRepository {
     return ok(clone(saved));
   }
 
-  async getAlert(id: string): Promise<Result<SavedAlert, AlertRepositoryError>> {
+  async getAlert(
+    id: string,
+  ): Promise<Result<SavedAlert, AlertRepositoryError>> {
     const alert = this.alerts.get(id);
     if (!alert) {
       return err({ code: "not_found", message: "Trade alert was not found" });
@@ -211,6 +217,12 @@ class InMemoryDecisionRepository implements DecisionRepository {
     this.decisions.set(saved.id, clone(saved));
     return ok(clone(saved));
   }
+
+  async saveCandidateDecision(
+    input: SaveCandidateDecisionInput,
+  ): Promise<Result<SavedDecision, DecisionRepositoryError>> {
+    return this.saveDecision(input);
+  }
 }
 
 class InMemoryWatchCandidateRepository implements WatchCandidateRepository {
@@ -235,7 +247,10 @@ class InMemoryWatchCandidateRepository implements WatchCandidateRepository {
   ): Promise<Result<SavedWatchCandidate, WatchCandidateRepositoryError>> {
     const candidate = this.candidates.get(input.candidateId);
     if (!candidate || candidate.userId !== input.userId) {
-      return err({ code: "not_found", message: "Watch candidate was not found" });
+      return err({
+        code: "not_found",
+        message: "Watch candidate was not found",
+      });
     }
     candidate.latestAnalysisId = input.latestAnalysisId;
     candidate.updatedAt = updatedAt;
@@ -653,7 +668,10 @@ describe("SupabaseWatchCandidateRepository", () => {
   });
 
   it("updates only latest_analysis_id and scopes by candidate plus user (mutation: overwrite source history or omit an ownership filter)", async () => {
-    const latestRow = { ...watchCandidateRow, latest_analysis_id: "analysis-2" };
+    const latestRow = {
+      ...watchCandidateRow,
+      latest_analysis_id: "analysis-2",
+    };
     const { client, queries } = createWatchCandidateSupabaseFake([
       { data: latestRow, error: null },
     ]);

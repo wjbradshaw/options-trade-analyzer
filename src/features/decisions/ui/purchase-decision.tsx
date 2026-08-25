@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useId, useRef, useState } from "react";
 import type { EntryAnalysis } from "@/features/analysis/domain/analyzer";
 import type { UnresolvedConfirmationCondition } from "@/features/decisions/domain/types";
 import type { DecisionRepository } from "@/features/decisions/server/decision-repository";
@@ -29,6 +29,7 @@ export interface PurchaseDecisionProps {
   unresolvedConditions: UnresolvedConfirmationCondition[];
   decisionRepository: DecisionRepository;
   watchCandidateRepository: WatchCandidateRepository;
+  watchCandidateId?: string;
   onRefresh: WatchCandidateCardProps["onRefresh"];
   now?: () => Date;
 }
@@ -42,9 +43,15 @@ export const PurchaseDecision = ({
   unresolvedConditions,
   decisionRepository,
   watchCandidateRepository,
+  watchCandidateId,
   onRefresh,
   now = () => new Date(),
 }: PurchaseDecisionProps) => {
+  const instanceId = useId();
+  const decisionName = `${instanceId}-decision`;
+  const quantityId = `${instanceId}-purchase-quantity`;
+  const fillId = `${instanceId}-actual-fill`;
+  const timestampId = `${instanceId}-purchase-timestamp`;
   const [selection, setSelection] = useState<DecisionSelection>("");
   const [quantity, setQuantity] = useState("1");
   const [actualFill, setActualFill] = useState("");
@@ -80,6 +87,16 @@ export const PurchaseDecision = ({
     return result.value;
   };
 
+  const saveTerminalDecision = (
+    input: Parameters<DecisionRepository["saveDecision"]>[0],
+  ) =>
+    watchCandidateId === undefined
+      ? decisionRepository.saveDecision(input)
+      : decisionRepository.saveCandidateDecision({
+          ...input,
+          candidateId: watchCandidateId,
+        });
+
   const save = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (saveInFlight.current || committed) return;
@@ -104,7 +121,8 @@ export const PurchaseDecision = ({
           sourceAnalysisId: analysisId,
           sourceAnalysisVerdict: "Wait",
           latestAnalysisId: analysisId,
-          unresolvedConfirmationConditions: structuredClone(unresolvedConditions),
+          unresolvedConfirmationConditions:
+            structuredClone(unresolvedConditions),
         }),
       );
       if (savedCandidate === null) return;
@@ -140,7 +158,7 @@ export const PurchaseDecision = ({
       }
 
       const savedDecision = await persistOnce(() =>
-        decisionRepository.saveDecision({
+        saveTerminalDecision({
           userId,
           tradeAlertId,
           entryAnalysisId: analysisId,
@@ -158,7 +176,7 @@ export const PurchaseDecision = ({
     }
 
     const savedDecision = await persistOnce(() =>
-      decisionRepository.saveDecision({
+      saveTerminalDecision({
         userId,
         tradeAlertId,
         entryAnalysisId: analysisId,
@@ -182,7 +200,7 @@ export const PurchaseDecision = ({
           <label>
             <input
               type="radio"
-              name="decision"
+              name={decisionName}
               value="purchased"
               checked={selection === "purchased"}
               disabled={saving || committed}
@@ -193,7 +211,7 @@ export const PurchaseDecision = ({
           <label>
             <input
               type="radio"
-              name="decision"
+              name={decisionName}
               value="skipped"
               checked={selection === "skipped"}
               disabled={saving || committed}
@@ -204,7 +222,7 @@ export const PurchaseDecision = ({
           <label>
             <input
               type="radio"
-              name="decision"
+              name={decisionName}
               value="saved_for_review"
               checked={selection === "saved_for_review"}
               disabled={analysis.verdict !== "Wait" || saving || committed}
@@ -220,9 +238,9 @@ export const PurchaseDecision = ({
 
         {selection === "purchased" ? (
           <div>
-            <label htmlFor="purchase-quantity">Quantity</label>
+            <label htmlFor={quantityId}>Quantity</label>
             <select
-              id="purchase-quantity"
+              id={quantityId}
               value={quantity}
               disabled={saving || committed}
               onChange={(event) => setQuantity(event.target.value)}
@@ -231,18 +249,18 @@ export const PurchaseDecision = ({
               <option value="2">2</option>
               <option value="3">3</option>
             </select>
-            <label htmlFor="actual-fill">Actual fill</label>
+            <label htmlFor={fillId}>Actual fill</label>
             <input
-              id="actual-fill"
+              id={fillId}
               type="number"
               step="any"
               value={actualFill}
               disabled={saving || committed}
               onChange={(event) => setActualFill(event.target.value)}
             />
-            <label htmlFor="purchase-timestamp">Actual purchase timestamp</label>
+            <label htmlFor={timestampId}>Actual purchase timestamp</label>
             <input
-              id="purchase-timestamp"
+              id={timestampId}
               type="text"
               value={purchaseTimestamp}
               disabled={saving || committed}

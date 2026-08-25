@@ -1,6 +1,6 @@
 begin;
 
-select plan(22);
+select plan(31);
 
 -- This test fails if the authenticated CRUD grants are removed from the
 -- migration, even though the ownership policies still exist.
@@ -270,6 +270,24 @@ select ok(
   'anon cannot execute the candidate refresh transaction'
 );
 
+select ok(
+  has_function_privilege(
+    'authenticated',
+    'public.commit_watch_candidate_decision(uuid,uuid,uuid,uuid,text,smallint,numeric,jsonb,timestamptz)',
+    'EXECUTE'
+  ),
+  'authenticated can execute the candidate decision transaction'
+);
+
+select ok(
+  not has_function_privilege(
+    'anon',
+    'public.commit_watch_candidate_decision(uuid,uuid,uuid,uuid,text,smallint,numeric,jsonb,timestamptz)',
+    'EXECUTE'
+  ),
+  'anon cannot execute the candidate decision transaction'
+);
+
 select isnt(
   public.commit_entry_analysis_workflow(
     '11111111-1111-1111-1111-111111111111',
@@ -335,6 +353,102 @@ select isnt(
   ),
   '66666666-6666-6666-6666-666666666666'::uuid,
   'candidate refresh advances the latest analysis pointer'
+);
+
+select throws_ok(
+  $$
+    select public.commit_watch_candidate_decision(
+      '11111111-1111-1111-1111-111111111111',
+      '77777777-7777-7777-7777-777777777777',
+      '33333333-3333-3333-3333-333333333333',
+      (
+        select latest_analysis_id
+        from public.watch_candidates
+        where id = '77777777-7777-7777-7777-777777777777'
+      ),
+      'purchased', 4::smallint, 1.25,
+      '{"modelVersion":"phase-1-v1","source":"pgTAP candidate"}', now()
+    )
+  $$,
+  '23514',
+  null,
+  'an invalid decision aborts the candidate decision transaction'
+);
+
+select is(
+  (
+    select status
+    from public.watch_candidates
+    where id = '77777777-7777-7777-7777-777777777777'
+  ),
+  'watching',
+  'a failed candidate decision leaves the candidate watching'
+);
+
+select is(
+  (
+    select count(*)::integer
+    from public.trade_decisions
+    where decision_payload->>'source' = 'pgTAP candidate'
+  ),
+  0,
+  'a failed candidate decision leaves no partial decision row'
+);
+
+select isnt(
+  public.commit_watch_candidate_decision(
+    '11111111-1111-1111-1111-111111111111',
+    '77777777-7777-7777-7777-777777777777',
+    '33333333-3333-3333-3333-333333333333',
+    (
+      select latest_analysis_id
+      from public.watch_candidates
+      where id = '77777777-7777-7777-7777-777777777777'
+    ),
+    'purchased', 2::smallint, 1.25,
+    '{"modelVersion":"phase-1-v1","source":"pgTAP candidate"}', now()
+  )->>'id',
+  null::text,
+  'candidate decision transaction returns its persisted decision identifier'
+);
+
+select is(
+  (
+    select status
+    from public.watch_candidates
+    where id = '77777777-7777-7777-7777-777777777777'
+  ),
+  'resolved',
+  'a committed candidate decision resolves the watching candidate'
+);
+
+select is(
+  (
+    select count(*)::integer
+    from public.trade_decisions
+    where decision_payload->>'source' = 'pgTAP candidate'
+  ),
+  1,
+  'candidate decision transaction persists exactly one decision'
+);
+
+select results_eq(
+  $$
+    select d.entry_analysis_id
+    from public.trade_decisions d
+    join public.watch_candidates c
+      on c.id = '77777777-7777-7777-7777-777777777777'
+    where d.decision_payload->>'source' = 'pgTAP candidate'
+      and d.entry_analysis_id = c.latest_analysis_id
+  $$,
+  $$values (
+    (
+      select latest_analysis_id
+      from public.watch_candidates
+      where id = '77777777-7777-7777-7777-777777777777'
+    )
+  )$$,
+  'candidate decision is bound to the candidate latest analysis'
 );
 
 select * from finish();

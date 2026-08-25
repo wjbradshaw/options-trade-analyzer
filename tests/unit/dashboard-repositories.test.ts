@@ -22,9 +22,14 @@ const makeQueryClient = (data: unknown) => {
   const calls: Array<[string, ...unknown[]]> = [];
   const builder = {
     select: (value: string) => (calls.push(["select", value]), builder),
-    eq: (column: string, value: unknown) => (calls.push(["eq", column, value]), builder),
-    order: (column: string, options: unknown) =>
-      (calls.push(["order", column, options]), builder),
+    eq: (column: string, value: unknown) => (
+      calls.push(["eq", column, value]),
+      builder
+    ),
+    order: (column: string, options: unknown) => (
+      calls.push(["order", column, options]),
+      builder
+    ),
     limit: (value: number) => (calls.push(["limit", value]), builder),
     maybeSingle: async () => ({ data, error: null }),
     then: (resolve: (value: unknown) => unknown) =>
@@ -43,9 +48,14 @@ describe("dashboard repository reads", () => {
   it("loads the latest completed analysis", async () => {
     const { client, calls } = makeQueryClient(analysisRow);
 
-    const result = await new SupabaseAnalysisRepository(client).getLatestAnalysis();
+    const result = await new SupabaseAnalysisRepository(
+      client,
+    ).getLatestAnalysis();
 
-    expect(result).toMatchObject({ ok: true, value: { id: "analysis-1", verdict: "Wait" } });
+    expect(result).toMatchObject({
+      ok: true,
+      value: { id: "analysis-1", verdict: "Wait" },
+    });
     expect(calls).toEqual([
       ["from", "entry_analyses"],
       ["select", "*"],
@@ -57,7 +67,9 @@ describe("dashboard repository reads", () => {
   it("loads one analysis for saved-candidate hydration", async () => {
     const { client, calls } = makeQueryClient(analysisRow);
 
-    const result = await new SupabaseAnalysisRepository(client).getAnalysis("analysis-1");
+    const result = await new SupabaseAnalysisRepository(client).getAnalysis(
+      "analysis-1",
+    );
 
     expect(result).toMatchObject({ ok: true, value: { id: "analysis-1" } });
     expect(calls).toEqual([
@@ -82,7 +94,9 @@ describe("dashboard repository reads", () => {
     };
     const { client, calls } = makeQueryClient([row]);
 
-    const result = await new SupabaseWatchCandidateRepository(client).listWatchingCandidates();
+    const result = await new SupabaseWatchCandidateRepository(
+      client,
+    ).listWatchingCandidates();
 
     expect(result).toMatchObject({ ok: true, value: [{ id: "candidate-1" }] });
     expect(calls).toEqual([
@@ -108,7 +122,9 @@ describe("dashboard repository reads", () => {
     };
     const { client, calls } = makeQueryClient(row);
 
-    const result = await new SupabaseWatchCandidateRepository(client).getCandidate("candidate-1");
+    const result = await new SupabaseWatchCandidateRepository(
+      client,
+    ).getCandidate("candidate-1");
 
     expect(result).toMatchObject({ ok: true, value: { id: "candidate-1" } });
     expect(calls).toEqual([
@@ -128,6 +144,80 @@ describe("dashboard repository reads", () => {
       ["select", "*"],
       ["order", "decided_at", { ascending: false }],
       ["limit", 10],
+    ]);
+  });
+
+  it("uses the candidate-decision transaction with the latest analysis identity", async () => {
+    const calls: Array<[string, ...unknown[]]> = [];
+    const decisionRow = {
+      id: "decision-1",
+      user_id: "user-1",
+      trade_alert_id: "alert-1",
+      entry_analysis_id: "analysis-2",
+      decision: "purchased",
+      quantity: 2,
+      entry_premium: 1.25,
+      decision_payload: { modelVersion: "phase-1-v1" },
+      decided_at: "2026-08-25T14:05:00.000Z",
+      created_at: "2026-08-25T14:05:00.000Z",
+      updated_at: "2026-08-25T14:05:00.000Z",
+    };
+    const client = {
+      rpc: async (name: string, input: unknown) => {
+        calls.push(["rpc", name, input]);
+        return { data: decisionRow, error: null };
+      },
+    } as never;
+    const repository = new SupabaseDecisionRepository(
+      client,
+    ) as SupabaseDecisionRepository & {
+      saveCandidateDecision?: (input: {
+        candidateId: string;
+        userId: string;
+        tradeAlertId: string;
+        entryAnalysisId: string;
+        decision: "purchased";
+        quantity: 2;
+        entryPremium: number;
+        details: { modelVersion: string };
+        decidedAt: string;
+      }) => Promise<unknown>;
+    };
+
+    expect(repository.saveCandidateDecision).toBeTypeOf("function");
+    if (!repository.saveCandidateDecision) return;
+    const result = await repository.saveCandidateDecision({
+      candidateId: "candidate-1",
+      userId: "user-1",
+      tradeAlertId: "alert-1",
+      entryAnalysisId: "analysis-2",
+      decision: "purchased",
+      quantity: 2,
+      entryPremium: 1.25,
+      details: { modelVersion: "phase-1-v1" },
+      decidedAt: "2026-08-25T14:05:00.000Z",
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      value: { id: "decision-1", entryAnalysisId: "analysis-2" },
+    });
+    expect(calls).toEqual([
+      [
+        "rpc",
+        "commit_watch_candidate_decision",
+        {
+          p_candidate_id: "candidate-1",
+          p_user_id: "user-1",
+          p_trade_alert_id: "alert-1",
+          p_entry_analysis_id: "analysis-2",
+          p_decision: "purchased",
+          p_quantity: 2,
+          p_entry_premium: 1.25,
+          p_decision_payload: { modelVersion: "phase-1-v1" },
+          p_decided_at: "2026-08-25T14:05:00.000Z",
+        },
+      ],
     ]);
   });
 });

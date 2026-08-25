@@ -175,14 +175,37 @@ test.describe.serial("Phase One entry analyzer", () => {
     await expect(
       page.getByRole("heading", { name: "Set your options budget" }),
     ).toBeVisible();
-    await enterNumber(
-      page.getByRole("spinbutton", { name: "Options-only trading budget" }),
-      "100000",
-    );
-    await page.getByRole("button", { name: "Save options budget" }).click();
-    await expect(
-      page.getByRole("heading", { name: "Analyze an options entry" }),
-    ).toBeVisible();
+    const budgetInput = page.getByRole("spinbutton", {
+      name: "Options-only trading budget",
+    });
+    const saveBudget = page.getByRole("button", {
+      name: "Save options budget",
+    });
+    const analyzerHeading = page.getByRole("heading", {
+      name: "Analyze an options entry",
+    });
+    await enterNumber(budgetInput, "100000");
+    await saveBudget.click();
+    let setupOutcome = "pending";
+    await expect
+      .poll(async () => {
+        setupOutcome = (await analyzerHeading.isVisible())
+          ? "saved"
+          : (await page
+                .getByText(
+                  "Options-only trading budget must be a positive number.",
+                )
+                .isVisible())
+            ? "hydration-reset"
+            : "pending";
+        return setupOutcome;
+      })
+      .not.toBe("pending");
+    if (setupOutcome === "hydration-reset") {
+      await enterNumber(budgetInput, "100000");
+      await saveBudget.click();
+    }
+    await expect(analyzerHeading).toBeVisible();
     authenticatedState = await page.context().storageState();
     await expectNoSeriousAccessibilityViolations(page, "alert intake");
 
@@ -269,6 +292,18 @@ test.describe.serial("Phase One entry analyzer", () => {
     await expect(refreshResult).toContainText("After: Pass");
     await expect(refreshResult).toContainText("Changed evidence");
     await expect(refreshResult).toContainText("Too aggressive");
+    await expect(refreshResult).toHaveAttribute(
+      "data-latest-analysis-id",
+      /\S+/,
+    );
+    const refreshedAnalysisId = await refreshResult.getAttribute(
+      "data-latest-analysis-id",
+    );
+    if (refreshedAnalysisId === null) {
+      throw new Error(
+        "Refreshed candidate did not expose its latest analysis identity",
+      );
+    }
 
     const refreshedDecision = savedReview.getByRole("region", {
       name: "Purchase decision",
@@ -282,17 +317,52 @@ test.describe.serial("Phase One entry analyzer", () => {
       refreshedDecision.getByRole("spinbutton", { name: "Actual fill" }),
       "25",
     );
+    const purchaseTimestamp = new Date().toISOString();
     await refreshedDecision
       .getByRole("textbox", { name: "Actual purchase timestamp" })
-      .fill(new Date().toISOString());
+      .fill(purchaseTimestamp);
     await expectNoSeriousAccessibilityViolations(page, "purchase decision");
+    const candidateDecisionResponsePromise = page.waitForResponse(
+      (response) =>
+        response
+          .url()
+          .includes("/rest/v1/rpc/commit_watch_candidate_decision") &&
+        response.request().method() === "POST",
+    );
     await refreshedDecision
       .getByRole("button", { name: "Save decision" })
       .click();
+    const candidateDecisionResponse = await candidateDecisionResponsePromise;
+    expect(candidateDecisionResponse.ok()).toBe(true);
+    expect(candidateDecisionResponse.request().postDataJSON()).toMatchObject({
+      p_entry_analysis_id: refreshedAnalysisId,
+    });
     await expect(refreshedDecision.getByRole("status")).toHaveText(
       "Purchased decision saved.",
     );
     await expectAdvisoryCopy(page);
+    await page.reload();
+    const decisionHistory = page.getByRole("region", {
+      name: "Recent decisions",
+    });
+    await expect(decisionHistory).toContainText("purchased ·");
+    const persistedTimestamp = (await decisionHistory.innerText()).match(
+      /purchased · (\S+)/,
+    )?.[1];
+    expect(
+      persistedTimestamp === undefined
+        ? null
+        : new Date(persistedTimestamp).toISOString(),
+    ).toBe(purchaseTimestamp);
+    await expect(
+      page.getByRole("region", { name: "Saved Wait candidates" }),
+    ).toContainText("No saved Wait candidates.");
+    await expect(page.getByRole("region", { name: "Refresh SPX" })).toHaveCount(
+      0,
+    );
+    await expect(
+      page.getByRole("region", { name: "Purchase decision" }),
+    ).toHaveCount(0);
     await page.screenshot({
       path: testInfo.outputPath("phase-1-purchase.png"),
       fullPage: true,

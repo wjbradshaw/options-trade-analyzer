@@ -203,6 +203,7 @@ export const SavedCandidateReview = ({
           }
           decisionRepository={decisionRepository}
           watchCandidateRepository={watchCandidateRepository}
+          watchCandidateId={latestRefresh.candidate.id}
           onRefresh={async () =>
             err({
               code: "database",

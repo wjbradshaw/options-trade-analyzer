@@ -216,6 +216,20 @@ export interface Database {
         };
         Returns: Json;
       };
+      commit_watch_candidate_decision: {
+        Args: {
+          p_user_id: string;
+          p_candidate_id: string;
+          p_trade_alert_id: string;
+          p_entry_analysis_id: string;
+          p_decision: string;
+          p_quantity: number | null;
+          p_entry_premium: number | null;
+          p_decision_payload: Json;
+          p_decided_at: string;
+        };
+        Returns: Json;
+      };
     };
     Enums: Record<string, never>;
     CompositeTypes: Record<string, never>;

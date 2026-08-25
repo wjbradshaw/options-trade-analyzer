@@ -45,14 +45,14 @@ These `NEXT_PUBLIC_` values are bundled into browser JavaScript by Next.js. For 
 
 ## 3. Apply migrations and test database policy
 
-A clean reset re-creates local data, applies `supabase/migrations/0001_phase1.sql` and `0002_analysis_workflow_rpc.sql` in order, and deletes all existing local auth/application records:
+A clean reset re-creates local data, applies `supabase/migrations/0001_phase1.sql`, `0002_analysis_workflow_rpc.sql`, and `0003_candidate_decision_rpc.sql` in order, and deletes all existing local auth/application records:
 
 ```powershell
 pnpm exec supabase db reset
 pnpm exec supabase test db
 ```
 
-The pgTAP suite validates privileges, tenant isolation, confirmed-contract enforcement, one-to-three purchase quantities, Wait-candidate integrity, and transaction RPC permissions. Run both commands after any migration or RPC change.
+The pgTAP suite validates privileges, tenant isolation, confirmed-contract enforcement, one-to-three purchase quantities, Wait-candidate integrity, atomic candidate-decision resolution, and transaction RPC permissions. Run both commands after any migration or RPC change.
 
 For an already-running local database where data must be retained, review pending migrations before using the CLI migration-up workflow. For a remote deployment, link only the intended Supabase project, review the target, and use `supabase db push`; never use `db reset` against shared or production data.
 
@@ -141,11 +141,13 @@ E2E_MAILPIT_URL=https://<Mailpit-compatible test inbox API>
 
 The environment must allow disposable user creation, expose a Mailpit-compatible `/api/v1/messages` and `/api/v1/message/{id}` API, and allow the exact callback `http://127.0.0.1:3001/auth/callback`. Do not target production users, production mail, or production data. The suite will not use a service-role key or direct user creation as a substitute for the login UI.
 
+Playwright uses Next's dotenv loader before reading these overrides, so repository-root `.env.local` values are honored. Explicit process variables still take precedence according to Next's documented environment load order.
+
 ## 8. Deployment prerequisites
 
 Before deployment:
 
-1. Provision an isolated hosted Supabase project and apply both migrations.
+1. Provision an isolated hosted Supabase project and apply all checked-in migrations in order.
 2. Run pgTAP against a safe verification database and review all RLS/policy results.
 3. Configure the hosted project URL and anonymous key as build-time `NEXT_PUBLIC_` variables.
 4. Add the exact HTTPS application `/auth/callback` URL to Supabase Auth redirect allowlists and set the application site URL consistently.
