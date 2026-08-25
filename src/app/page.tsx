@@ -30,14 +30,10 @@ export default async function HomePage() {
       candidateRepository.listWatchingCandidates(),
     ]);
   const attention: NeedsAttentionItem[] = [];
-
-  if (!profileResult.ok && profileResult.error.code !== "not_found") {
-    attention.push({
-      id: "profile-load",
-      severity: "blocking",
-      message: profileResult.error.message,
-    });
-  }
+  const profileLoadError =
+    !profileResult.ok && profileResult.error.code !== "not_found"
+      ? profileResult.error.message
+      : null;
   if (!latestResult.ok || !decisionsResult.ok || !candidatesResult.ok) {
     attention.push({
       id: "dashboard-history",
@@ -85,6 +81,7 @@ export default async function HomePage() {
     <DashboardRoute
       userId={user.id}
       initialProfile={profileResult.ok ? profileResult.value : null}
+      profileLoadError={profileLoadError}
       initialCandidates={hydratedCandidates}
       initialLatestAnalysis={latestResult.ok ? latestResult.value : null}
       initialRecentDecisions={decisionsResult.ok ? decisionsResult.value : []}

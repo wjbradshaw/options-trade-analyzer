@@ -10,6 +10,7 @@ import {
 } from "@/features/market/domain/snapshot";
 
 export interface ManualSnapshotFormProps {
+  disabled?: boolean;
   dte: number;
   idPrefix?: string;
   now?: () => Date;
@@ -41,6 +42,7 @@ const invalidPriceMessage = (optionPremium: number | null, underlyingPrice: numb
 };
 
 export const ManualSnapshotForm = ({
+  disabled = false,
   dte,
   idPrefix,
   now = () => new Date(),
@@ -94,6 +96,7 @@ export const ManualSnapshotForm = ({
       <div>
         <label htmlFor={optionPremiumId}>User-entered option premium</label>
         <input
+          disabled={disabled}
           id={optionPremiumId}
           name="optionPremium"
           type="number"
@@ -105,6 +108,7 @@ export const ManualSnapshotForm = ({
       <div>
         <label htmlFor={underlyingPriceId}>User-entered underlying price</label>
         <input
+          disabled={disabled}
           id={underlyingPriceId}
           name="underlyingPrice"
           type="number"
@@ -113,7 +117,7 @@ export const ManualSnapshotForm = ({
           onChange={(event) => setUnderlyingPrice(event.target.value)}
         />
       </div>
-      <button type="submit">Confirm market snapshot</button>
+      <button type="submit" disabled={disabled}>Confirm market snapshot</button>
       {error === null ? null : <p role="alert">{error}</p>}
       {confirmation === null ? null : (
         <p role="status">

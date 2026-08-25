@@ -14,6 +14,7 @@ import type { NeedsAttentionItem } from "./needs-attention";
 export interface DashboardRouteProps {
   userId: string;
   initialProfile: Profile | null;
+  profileLoadError: string | null;
   initialCandidates: HydratedWatchCandidate[];
   initialLatestAnalysis: SavedAnalysis | null;
   initialRecentDecisions: SavedDecision[];

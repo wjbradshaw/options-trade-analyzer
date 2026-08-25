@@ -27,6 +27,7 @@ export interface WatchCandidateCardProps {
   candidate: SavedWatchCandidate;
   sourceAnalysis: EntryAnalysis;
   sourceAnalyzedAt: string;
+  initialRefresh?: WatchCandidateRefresh;
   onRefresh: (
     candidate: SavedWatchCandidate,
   ) => Promise<Result<WatchCandidateRefresh, RepositoryError>>;
@@ -36,9 +37,10 @@ const WatchCandidateCardState = ({
   candidate,
   sourceAnalysis,
   sourceAnalyzedAt,
+  initialRefresh,
   onRefresh,
 }: WatchCandidateCardProps) => {
-  const [refresh, setRefresh] = useState<WatchCandidateRefresh | null>(null);
+  const [refresh, setRefresh] = useState<WatchCandidateRefresh | null>(initialRefresh ?? null);
   const [refreshError, setRefreshError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 

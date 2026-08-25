@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import Link from "next/link";
+import { useRef, useState } from "react";
 import type { ParsedTradeAlert } from "@/features/alerts/domain/types";
 import type { SavedAlert } from "@/features/alerts/server/alert-repository";
 import { AlertPasteForm } from "@/features/alerts/ui/alert-paste-form";
@@ -30,7 +31,10 @@ import type { Profile, ProfileRepository } from "@/features/profile/server/profi
 import type { TraderRepository, TraderSource } from "@/features/traders/server/trader-repository";
 import { err, type Result } from "@/lib/result";
 import type { RepositoryError } from "@/lib/supabase/repository-error";
-import type { WatchCandidateRefresh } from "@/features/decisions/ui/watch-candidate-card";
+import type {
+  ChangedEvidence,
+  WatchCandidateRefresh,
+} from "@/features/decisions/ui/watch-candidate-card";
 import type { NeedsAttentionItem } from "./needs-attention";
 import { Dashboard } from "./dashboard";
 import { OptionsBudgetSetup } from "./options-budget-setup";
@@ -47,6 +51,7 @@ export interface HydratedWatchCandidate {
 export interface DashboardWorkflowProps {
   userId: string;
   initialProfile: Profile | null;
+  profileLoadError?: string | null;
   initialCandidates: HydratedWatchCandidate[];
   initialLatestAnalysis: SavedAnalysis | null;
   initialRecentDecisions: SavedDecision[];
@@ -72,6 +77,24 @@ export interface SavedCandidateReviewProps {
   now?: () => Date;
 }
 
+const compareEvidence = (
+  before: EntryAnalysis,
+  after: EntryAnalysis,
+): ChangedEvidence[] =>
+  after.factors.flatMap((latest) => {
+    const previous = before.factors.find((factor) => factor.category === latest.category);
+    if (previous && previous.status === latest.status && previous.summary === latest.summary) {
+      return [];
+    }
+    return [{
+      category: latest.category,
+      before: previous
+        ? `${previous.status}: ${previous.summary}`
+        : "Not previously recorded",
+      after: `${latest.status}: ${latest.summary}`,
+    }];
+  });
+
 export const SavedCandidateReview = ({
   item,
   refreshAction,
@@ -83,6 +106,17 @@ export const SavedCandidateReview = ({
     asOf: now().toISOString().slice(0, 10),
     expiration: item.alert.expiration as string,
   });
+  const initialRefresh: WatchCandidateRefresh | undefined =
+    item.candidate.sourceAnalysisId === item.candidate.latestAnalysisId
+      ? undefined
+      : {
+          candidate: item.candidate,
+          beforeAnalysis: item.sourceAnalysis,
+          beforeAnalyzedAt: item.sourceAnalyzedAt,
+          latestAnalysis: item.latestAnalysis,
+          latestAnalyzedAt: item.latestAnalyzedAt,
+          changedEvidence: compareEvidence(item.sourceAnalysis, item.latestAnalysis),
+        };
 
   return (
     <section aria-label={`Refresh ${item.alert.symbol ?? "saved candidate"}`}>
@@ -108,6 +142,7 @@ export const SavedCandidateReview = ({
         candidate={item.candidate}
         sourceAnalysis={item.sourceAnalysis}
         sourceAnalyzedAt={item.sourceAnalyzedAt}
+        initialRefresh={initialRefresh}
         onRefresh={async () =>
           snapshot === null
             ? err({ code: "database", message: "Confirm a new manual snapshot before refresh." })
@@ -137,6 +172,7 @@ const unresolvedConditions = (analysis: EntryAnalysis) =>
 export const DashboardWorkflow = ({
   userId,
   initialProfile,
+  profileLoadError = null,
   initialCandidates,
   initialLatestAnalysis,
   initialRecentDecisions,
@@ -158,6 +194,28 @@ export const DashboardWorkflow = ({
   const [completed, setCompleted] = useState<DashboardEntryAnalysis | null>(null);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
+  const analysisInFlight = useRef(false);
+
+  if (profileLoadError !== null) {
+    return (
+      <main style={{ display: "grid", gap: "1rem", padding: "1rem" }}>
+        <section
+          aria-label="Profile load error"
+          style={{
+            background: "#2a1820",
+            border: "1px solid #c56a7a",
+            borderRadius: "0.75rem",
+            maxWidth: "40rem",
+            padding: "1rem",
+          }}
+        >
+          <h1>Trading budget could not load</h1>
+          <p role="alert">{profileLoadError}</p>
+          <Link href="/">Retry profile load</Link>
+        </section>
+      </main>
+    );
+  }
 
   if (profile === null) {
     return (
@@ -196,23 +254,30 @@ export const DashboardWorkflow = ({
   };
 
   const analyzeSnapshot = async (marketSnapshot: AnalyzeAlertCommand["marketSnapshot"]) => {
-    if (pendingAlert === null || traderSource === null) return;
+    if (pendingAlert === null || traderSource === null || analysisInFlight.current) return;
+    analysisInFlight.current = true;
     setAnalyzing(true);
     setAnalysisError(null);
     const parsedPlannedLoss = plannedLoss.trim() === "" ? undefined : Number(plannedLoss);
-    const result = await analyzeAction({
-      alert: pendingAlert,
-      traderSourceId: traderSource.id,
-      marketSnapshot,
-      quantity,
-      plannedLoss: parsedPlannedLoss,
-    });
-    setAnalyzing(false);
-    if (!result.ok) {
-      setAnalysisError(result.error.message);
-      return;
+    try {
+      const result = await analyzeAction({
+        alert: pendingAlert,
+        traderSourceId: traderSource.id,
+        marketSnapshot,
+        quantity,
+        plannedLoss: parsedPlannedLoss,
+      });
+      if (!result.ok) {
+        setAnalysisError(result.error.message);
+        return;
+      }
+      setCompleted(result.value);
+    } catch {
+      setAnalysisError("The entry analysis could not be completed.");
+    } finally {
+      analysisInFlight.current = false;
+      setAnalyzing(false);
     }
-    setCompleted(result.value);
   };
 
   const attention = [
@@ -238,6 +303,7 @@ export const DashboardWorkflow = ({
           <h2>Confirm market snapshot</h2>
           <label htmlFor="planned-quantity">Planned quantity</label>
           <select
+            disabled={analyzing}
             id="planned-quantity"
             value={quantity}
             onChange={(event) => setQuantity(Number(event.target.value) as 1 | 2 | 3)}
@@ -248,6 +314,7 @@ export const DashboardWorkflow = ({
           </select>
           <label htmlFor="planned-loss">Planned loss (optional)</label>
           <input
+            disabled={analyzing}
             id="planned-loss"
             min="0"
             step="0.01"
@@ -256,6 +323,7 @@ export const DashboardWorkflow = ({
             onChange={(event) => setPlannedLoss(event.target.value)}
           />
           <ManualSnapshotForm
+            disabled={analyzing}
             dte={dte}
             now={now}
             onConfirm={(snapshot) => void analyzeSnapshot(snapshot)}
