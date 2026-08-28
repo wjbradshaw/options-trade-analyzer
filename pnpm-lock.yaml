@@ -69,9 +69,6 @@ importers:
       prettier:
         specifier: ^3.9.6
         version: 3.9.6
-      supabase:
-        specifier: ^2.114.0
-        version: 2.114.0
       typescript:
         specifier: ^6.0.0
         version: 6.0.3
