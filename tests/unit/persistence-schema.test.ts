@@ -157,4 +157,25 @@ describe("transactional analysis workflow", () => {
       /grant execute on function .* to authenticated/,
     );
   });
+
+  it("creates user_positions, user_position_events, and host_events with transactional RPCs", () => {
+    const phase2MigrationPath = resolve(
+      process.cwd(),
+      "supabase/migrations/0005_phase2_positions.sql",
+    );
+    expect(existsSync(phase2MigrationPath)).toBe(true);
+    if (!existsSync(phase2MigrationPath)) return;
+
+    const phase2Migration = readFileSync(phase2MigrationPath, "utf8").replace(
+      /\s+/g,
+      " ",
+    );
+    expect(phase2Migration).toMatch(/create table if not exists public\.user_positions/);
+    expect(phase2Migration).toMatch(/create table if not exists public\.user_position_events/);
+    expect(phase2Migration).toMatch(/create table if not exists public\.host_events/);
+    expect(phase2Migration).toMatch(/create or replace function public\.commit_user_purchase_and_open_position/);
+    expect(phase2Migration).toMatch(/create or replace function public\.commit_position_trim/);
+    expect(phase2Migration).toMatch(/create or replace function public\.commit_position_close/);
+  });
 });
+

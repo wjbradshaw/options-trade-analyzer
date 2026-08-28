@@ -174,6 +174,82 @@ export interface Database {
           status?: string;
         }
       >;
+      user_positions: Table<
+        TimestampColumns & {
+          id: string;
+          user_id: string;
+          trade_alert_id: string;
+          entry_analysis_id: string;
+          initial_quantity: number;
+          remaining_quantity: number;
+          initial_entry_premium: number;
+          status: "open" | "closed";
+          opened_at: string;
+          closed_at: string | null;
+        },
+        OptionalTimestamps & {
+          id?: string;
+          user_id: string;
+          trade_alert_id: string;
+          entry_analysis_id: string;
+          initial_quantity: number;
+          remaining_quantity: number;
+          initial_entry_premium: number;
+          status: "open" | "closed";
+          opened_at: string;
+          closed_at?: string | null;
+        }
+      >;
+      user_position_events: Table<
+        TimestampColumns & {
+          id: string;
+          user_position_id: string;
+          user_id: string;
+          event_type: "purchase" | "trim" | "close" | "fill_correction" | "quantity_correction" | "note";
+          quantity_delta: number | null;
+          executed_premium: number | null;
+          notes: string | null;
+          event_payload: Json;
+        },
+        OptionalTimestamps & {
+          id?: string;
+          user_position_id: string;
+          user_id: string;
+          event_type: "purchase" | "trim" | "close" | "fill_correction" | "quantity_correction" | "note";
+          quantity_delta?: number | null;
+          executed_premium?: number | null;
+          notes?: string | null;
+          event_payload?: Json;
+        }
+      >;
+      host_events: Table<
+        TimestampColumns & {
+          id: string;
+          user_id: string;
+          trade_alert_id: string | null;
+          user_position_id: string | null;
+          trader_source_id: string | null;
+          raw_text: string;
+          event_type: "entered" | "added" | "trimmed" | "all_out" | "note";
+          claimed_entry_premium: number | null;
+          claimed_exit_premium: number | null;
+          claimed_percentage: number | null;
+          event_payload: Json;
+        },
+        OptionalTimestamps & {
+          id?: string;
+          user_id: string;
+          trade_alert_id?: string | null;
+          user_position_id?: string | null;
+          trader_source_id?: string | null;
+          raw_text: string;
+          event_type: "entered" | "added" | "trimmed" | "all_out" | "note";
+          claimed_entry_premium?: number | null;
+          claimed_exit_premium?: number | null;
+          claimed_percentage?: number | null;
+          event_payload?: Json;
+        }
+      >;
     };
     Views: Record<string, never>;
     Functions: {
@@ -227,6 +303,39 @@ export interface Database {
           p_entry_premium: number | null;
           p_decision_payload: Json;
           p_decided_at: string;
+        };
+        Returns: Json;
+      };
+      commit_user_purchase_and_open_position: {
+        Args: {
+          p_user_id: string;
+          p_trade_alert_id: string;
+          p_entry_analysis_id: string;
+          p_quantity: number;
+          p_entry_premium: number;
+          p_details: Json;
+          p_decided_at: string;
+        };
+        Returns: Json;
+      };
+      commit_position_trim: {
+        Args: {
+          p_user_id: string;
+          p_position_id: string;
+          p_trim_quantity: number;
+          p_exit_premium: number;
+          p_notes: string;
+          p_trimmed_at: string;
+        };
+        Returns: Json;
+      };
+      commit_position_close: {
+        Args: {
+          p_user_id: string;
+          p_position_id: string;
+          p_exit_premium: number;
+          p_notes: string;
+          p_closed_at: string;
         };
         Returns: Json;
       };
