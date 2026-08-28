@@ -9,7 +9,9 @@ const sendMagicLink = async (formData: FormData): Promise<void> => {
   if (!email) redirect("/login?error=Email%20is%20required");
 
   const headerStore = await headers();
-  const origin = headerStore.get("origin");
+  const host = headerStore.get("x-forwarded-host") ?? headerStore.get("host");
+  const proto = headerStore.get("x-forwarded-proto") ?? "https";
+  const origin = headerStore.get("origin") ?? (host ? `${proto}://${host}` : undefined);
   const supabase = await createClient();
   const { error } = await supabase.auth.signInWithOtp({
     email,
