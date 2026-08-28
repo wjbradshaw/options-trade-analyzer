@@ -45,14 +45,14 @@ These `NEXT_PUBLIC_` values are bundled into browser JavaScript by Next.js. For 
 
 ## 3. Apply migrations and test database policy
 
-A clean reset re-creates local data, applies `supabase/migrations/0001_phase1.sql`, `0002_analysis_workflow_rpc.sql`, and `0003_candidate_decision_rpc.sql` in order, and deletes all existing local auth/application records:
+A clean reset re-creates local data, applies `supabase/migrations/0001_phase1.sql`, `0002_analysis_workflow_rpc.sql`, `0003_candidate_decision_rpc.sql`, and `0004_candidate_refresh_lock.sql` in order, and deletes all existing local auth/application records:
 
 ```powershell
 pnpm exec supabase db reset
 pnpm exec supabase test db
 ```
 
-The pgTAP suite validates privileges, tenant isolation, confirmed-contract enforcement, one-to-three purchase quantities, Wait-candidate integrity, atomic candidate-decision resolution, and transaction RPC permissions. Run both commands after any migration or RPC change.
+The pgTAP suite validates privileges, tenant isolation, confirmed-contract enforcement, one-to-three purchase quantities, Wait-candidate integrity, atomic candidate-decision resolution, transaction RPC permissions, and both refresh-versus-terminal-decision lock orderings over separate database connections. Run both commands after any migration or RPC change.
 
 For an already-running local database where data must be retained, review pending migrations before using the CLI migration-up workflow. For a remote deployment, link only the intended Supabase project, review the target, and use `supabase db push`; never use `db reset` against shared or production data.
 
