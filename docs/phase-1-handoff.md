@@ -1,6 +1,6 @@
 # Options Trade Analyzer — Phase One Handoff
 
-Last updated: 2026-08-24
+Last updated: 2026-08-28
 
 ## Purpose
 
@@ -21,7 +21,8 @@ The approved specification resolves any conflict with the plan or this handoff.
 
 - Workspace: `C:\Users\rjsc\Documents\Codex\2026-08-17\options-trade-analyzer`
 - Branch: `phase-1-entry-analyzer`
-- Current implementation head: `114c63a fix: address dashboard workflow review findings`
+- Current verified implementation head: `adb5ed6 fix: serialize candidate refresh and terminal decision transactions`
+- Task 10 fix round 2 is complete with clean verification across all test and build gates.
 - No remote push, merge, or deployment has been performed.
 
 ## Phase One constraints that must remain intact
@@ -48,10 +49,13 @@ The approved specification resolves any conflict with the plan or this handoff.
 | 7. Alert intake and confirmation interface | Reviewed complete | `b2ad363`, `bf0489a` |
 | 8. Hybrid analysis block and purchase decision | Reviewed complete | `ce99f2c`, `8b45705` |
 | 9. Server orchestration and dashboard workflow | Reviewed complete; live verification passed | `14217fb`, `114c63a` |
+| 10. E2E, accessibility, and operations | Reviewed complete | `7d2839d`, `08fabdd`, `adb5ed6` |
 
 Task 4 includes a passwordless Supabase login/callback, typed client/server repositories, a Phase One migration with RLS and tenant-safe foreign keys, confirmed-contract enforcement before persisted analyses, and `Wait` candidate integrity. Its review/fix loop closed with no open code findings.
 
 ## Fresh verification evidence
+
+At Task 10 fix-round-2 head (`adb5ed6`), the implementer freshly reported a clean reset through migrations 0001–0004, 41/41 pgTAP assertions (including 10/10 two-connection dblink concurrency test assertions), 157/157 Vitest tests, 12/12 desktop/mobile Playwright cases, 2/2 dedicated axe journeys, and clean ESLint, TypeScript, production build, and diff checks. Concurrency testing confirmed that `commit_wait_candidate_refresh` and `commit_watch_candidate_decision` serialize properly on the candidate row with no orphan records. See `.superpowers/sdd/2026-08-14-phase-1-entry-analyzer-implementation/task-10-fix-round-2-report.md` and `.superpowers/sdd/2026-08-14-phase-1-entry-analyzer-implementation/whole-branch-review.md`.
 
 At Task 9 head (`114c63a`), the controller ran successfully:
 
@@ -92,7 +96,7 @@ Supabase CLI state under `supabase/.temp/` and `supabase/.branches/` is generate
 
 ## Next implementation step
 
-Start **Task 10: End-to-end verification, accessibility, and documentation** from the approved plan. Add authenticated desktop/mobile Playwright coverage, axe checks, setup/operations documentation, then run final whole-branch review and the branch-finishing workflow. Task 10 has not started.
+Phase One implementation is complete and approved across all 10 tasks and whole-branch review. Perform the branch-finishing workflow (ask the user for merge / PR / retain branch decision).
 
 ## Known non-blocking follow-ups
 
