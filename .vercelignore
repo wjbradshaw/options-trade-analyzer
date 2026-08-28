@@ -1,0 +1,5 @@
+﻿supabase/
+tests/
+.superpowers/
+docs/
+*.sql
